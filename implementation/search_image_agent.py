@@ -77,7 +77,13 @@ def search_in_sheets(query, sheet_id):
         raise Exception("token.json missing - cannot search sheets")
     
     # Use OAuth2 token with Sheets scope
-    SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+    SCOPES = [
+        'https://www.googleapis.com/auth/gmail.modify',
+        'https://www.googleapis.com/auth/calendar',
+        'https://www.googleapis.com/auth/contacts.readonly',
+        'https://www.googleapis.com/auth/drive',
+        'https://www.googleapis.com/auth/spreadsheets'
+    ]
     creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
     
     gc = gspread.authorize(creds)
@@ -150,7 +156,13 @@ def download_and_send(file_id, chat_id):
     try:
         # Download from Google Drive
         TOKEN_FILE = 'token.json'
-        SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
+        SCOPES = [
+            'https://www.googleapis.com/auth/gmail.modify',
+            'https://www.googleapis.com/auth/calendar',
+            'https://www.googleapis.com/auth/contacts.readonly',
+            'https://www.googleapis.com/auth/drive',
+            'https://www.googleapis.com/auth/spreadsheets'
+        ]
         creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
         
         service = build('drive', 'v3', credentials=creds)

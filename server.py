@@ -18,8 +18,11 @@ import weather_agent
 import blog_agent
 import image_agent
 import search_image_agent
+import search_image_agent
 import stripe_utils
 import faceless_video_agent
+import google_contacts
+import verify_google_creds
 
 app = Flask(__name__)
 
@@ -34,10 +37,13 @@ def index():
 
 @app.route('/api/mail/list', methods=['GET'])
 def list_mail():
-    max_results = request.args.get('max_results', default=10, type=int)
-    service = google_mail.get_service()
-    result = google_mail.list_emails(service, max_results=max_results)
-    return jsonify(result)
+    try:
+        max_results = request.args.get('max_results', default=10, type=int)
+        service = google_mail.get_service()
+        result = google_mail.list_emails(service, max_results=max_results)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
 
 @app.route('/api/mail/send', methods=['POST'])
 def send_mail():
@@ -90,10 +96,13 @@ def delete_mail(message_id):
 
 @app.route('/api/calendar/list', methods=['GET'])
 def list_calendar():
-    max_results = request.args.get('max_results', default=10, type=int)
-    service = google_calendar.get_service()
-    result = google_calendar.list_events(service, max_results=max_results)
-    return jsonify(result)
+    try:
+        max_results = request.args.get('max_results', default=10, type=int)
+        service = google_calendar.get_service()
+        result = google_calendar.list_events(service, max_results=max_results)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
 
 @app.route('/api/calendar/create', methods=['POST'])
 def create_event():
@@ -305,6 +314,40 @@ def video_status():
          
     result = faceless_video_agent.check_video_status(project_id)
     return jsonify(result)
+
+# --- CONTACTS ENDPOINTS ---
+
+@app.route('/api/contacts/list', methods=['GET'])
+def list_contacts():
+    try:
+        max_results = request.args.get('max_results', default=20, type=int)
+        service = google_contacts.get_service()
+        result = google_contacts.list_contacts(service, max_results=max_results)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+
+@app.route('/api/contacts/search', methods=['GET'])
+def search_contacts():
+    try:
+        query = request.args.get('q', default='')
+        service = google_contacts.get_service()
+        result = google_contacts.search_contacts(service, query)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+
+@app.route('/api/auth/google', methods=['GET'])
+def authorize_google():
+    try:
+        verify_google_creds.main()
+        if os.path.exists('token.json'):
+            return jsonify({"status": "success", "message": "Authentication successful!"})
+        else:
+            return jsonify({"status": "error", "message": "Authentication failed or cancelled."}), 500
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

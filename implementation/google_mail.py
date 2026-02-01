@@ -8,20 +8,22 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+SCOPES = [
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/contacts.readonly'
+]
 TOKEN_FILE = 'token.json'
 
 def get_service():
     if not os.path.exists(TOKEN_FILE):
-        print(json.dumps({"status": "error", "message": "token.json not found. Please authenticate first."}))
-        sys.exit(1)
+        raise FileNotFoundError("token.json not found. Please authenticate first.")
     
     try:
         creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
         return build('gmail', 'v1', credentials=creds)
     except Exception as e:
-        print(json.dumps({"status": "error", "message": f"Failed to load credentials: {str(e)}"}))
-        sys.exit(1)
+        raise Exception(f"Failed to load credentials: {str(e)}")
 
 def send_email(service, to, subject, body):
     try:

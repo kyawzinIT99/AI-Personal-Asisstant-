@@ -1,39 +1,90 @@
 // Tab Switching
 function showSection(sectionId) {
+    const sections = [
+        'mail', 'calendar', 'leads', 'web', 'chat',
+        'weather', 'blog', 'image', 'image-search',
+        'faceless', 'contacts'
+    ];
+
     // Hide all sections
-    document.getElementById('mail-section').style.display = 'none';
-    document.getElementById('calendar-section').style.display = 'none';
-    document.getElementById('leads-section').style.display = 'none';
-    document.getElementById('web-section').style.display = 'none';
-    document.getElementById('chat-section').style.display = 'none';
-    document.getElementById('weather-section').style.display = 'none';
-    document.getElementById('blog-section').style.display = 'none';
-    document.getElementById('image-section').style.display = 'none';
-    document.getElementById('image-search-section').style.display = 'none';
-    document.getElementById('faceless-section').style.display = 'none';
+    sections.forEach(id => {
+        const el = document.getElementById(id + '-section');
+        if (el) el.style.display = 'none';
+    });
 
     // Deselect dock items
     document.querySelectorAll('.dock-item').forEach(item => item.classList.remove('active'));
 
     // Show target section
-    document.getElementById(sectionId + '-section').style.display = 'block';
+    const targetSection = document.getElementById(sectionId + '-section');
+    if (targetSection) {
+        targetSection.style.display = 'block';
+    }
 
     // Select dock item
     const dockItems = document.querySelectorAll('.dock-item');
-    if (sectionId === 'mail') dockItems[0].classList.add('active');
-    if (sectionId === 'calendar') dockItems[1].classList.add('active');
-    if (sectionId === 'leads') dockItems[2].classList.add('active');
-    if (sectionId === 'web') dockItems[3].classList.add('active');
-    if (sectionId === 'chat') dockItems[4].classList.add('active');
-    if (sectionId === 'weather') dockItems[5].classList.add('active');
-    if (sectionId === 'blog') dockItems[6].classList.add('active');
-    if (sectionId === 'image') dockItems[7].classList.add('active');
-    if (sectionId === 'image-search') dockItems[8].classList.add('active');
-    if (sectionId === 'faceless') dockItems[9].classList.add('active');
+    if (dockItems.length > 0) {
+        if (sectionId === 'mail') dockItems[0].classList.add('active');
+        if (sectionId === 'calendar') dockItems[1].classList.add('active');
+        if (sectionId === 'leads') dockItems[2].classList.add('active');
+        if (sectionId === 'contacts') dockItems[3].classList.add('active');
+        if (sectionId === 'web') dockItems[4].classList.add('active');
+        if (sectionId === 'chat') dockItems[5].classList.add('active');
+        if (sectionId === 'weather') dockItems[6].classList.add('active');
+        if (sectionId === 'blog') dockItems[7].classList.add('active');
+        if (sectionId === 'image') dockItems[8].classList.add('active');
+        if (sectionId === 'image-search') dockItems[9].classList.add('active');
+        if (sectionId === 'faceless') dockItems[10].classList.add('active');
+    }
 
     // Auto load data
     if (sectionId === 'mail') fetchMail();
     if (sectionId === 'calendar') fetchCalendar();
+    if (sectionId === 'contacts') fetchContacts();
+}
+
+// Global Auth Handling
+async function checkAuthResponse(response) {
+    if (response.status === 401) {
+        document.getElementById('auth-overlay').style.display = 'flex';
+        const data = await response.json();
+        throw new Error(data.message || 'Authentication required');
+    }
+    return response;
+}
+
+async function handleGoogleAuth() {
+    const overlay = document.getElementById('auth-overlay');
+    const btn = overlay.querySelector('button');
+    const originalText = btn.innerText;
+
+    btn.innerText = 'Authorizing...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch('/api/auth/google');
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            alert('Authentication successful!');
+            overlay.style.display = 'none';
+            // Refresh current section
+            const activeDockItem = document.querySelector('.dock-item.active');
+            if (activeDockItem) {
+                const title = activeDockItem.getAttribute('title').toLowerCase();
+                if (title === 'gmail') fetchMail();
+                if (title === 'calendar') fetchCalendar();
+                if (title === 'contacts') fetchContacts();
+            }
+        } else {
+            alert('Authentication failed: ' + data.message);
+        }
+    } catch (error) {
+        alert('Network error during authentication: ' + error);
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
 }
 
 // Format Date Utility
@@ -52,7 +103,8 @@ async function fetchMail() {
     listContainer.innerHTML = '<div class="loading">Loading emails...</div>';
 
     try {
-        const response = await fetch('/api/mail/list?max_results=10');
+        let response = await fetch('/api/mail/list?max_results=10');
+        response = await checkAuthResponse(response);
         const data = await response.json();
 
         if (data.status === 'success') {
@@ -247,7 +299,8 @@ async function fetchCalendar() {
     listContainer.innerHTML = '<div class="loading">Loading events...</div>';
 
     try {
-        const response = await fetch('/api/calendar/list?max_results=10');
+        let response = await fetch('/api/calendar/list?max_results=10');
+        response = await checkAuthResponse(response);
         const data = await response.json();
 
         if (data.status === 'success') {
@@ -423,6 +476,115 @@ async function deleteCurrentEvent() {
         alert('Network error: ' + error);
     }
 }
+
+// --- CONTACTS LOGIC ---
+
+async function fetchContacts() {
+    // Clear search bar when refreshing all contacts
+    const searchInput = document.getElementById('contacts-search');
+    if (searchInput) searchInput.value = '';
+
+    const listContainer = document.getElementById('contacts-list');
+    listContainer.innerHTML = '<div class="loading">Loading contacts...</div>';
+
+    try {
+        let response = await fetch('/api/contacts/list?max_results=30');
+        response = await checkAuthResponse(response);
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            renderContacts(data.contacts);
+        } else {
+            listContainer.innerHTML = `<div class="loading">Error: ${data.message}</div>`;
+        }
+    } catch (error) {
+        listContainer.innerHTML = `<div class="loading">Error loading contacts: ${error}</div>`;
+    }
+}
+
+let contactSearchTimeout = null;
+function onContactSearchInput(query) {
+    clearTimeout(contactSearchTimeout);
+    contactSearchTimeout = setTimeout(() => {
+        searchContacts(query);
+    }, 500); // 500ms debounce
+}
+
+async function searchContacts(query) {
+    if (!query || query.trim() === '') {
+        fetchContacts();
+        return;
+    }
+
+    const listContainer = document.getElementById('contacts-list');
+    listContainer.innerHTML = '<div class="loading">Searching...</div>';
+
+    try {
+        let response = await fetch(`/api/contacts/search?q=${encodeURIComponent(query)}`);
+        response = await checkAuthResponse(response);
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            renderContacts(data.contacts);
+        } else {
+            listContainer.innerHTML = `<div class="loading">Error: ${data.message}</div>`;
+        }
+    } catch (error) {
+        listContainer.innerHTML = `<div class="loading">Error searching contacts: ${error}</div>`;
+    }
+}
+
+function renderContacts(contacts) {
+    const listContainer = document.getElementById('contacts-list');
+    listContainer.innerHTML = '';
+
+    if (!contacts || contacts.length === 0) {
+        listContainer.innerHTML = '<div class="placeholder-text" style="grid-column: 1/-1; text-align: center; padding: 40px;">No contacts found.</div>';
+        return;
+    }
+
+    contacts.forEach(contact => {
+        const card = document.createElement('div');
+        card.className = 'contact-card';
+
+        // Avatar Logic
+        let avatarHtml = '';
+        if (contact.photo) {
+            avatarHtml = `<div class="contact-avatar" style="background-image: url('${contact.photo}')"></div>`;
+        } else {
+            const initial = (contact.name && contact.name !== 'Unknown Name' && contact.name !== 'No Name')
+                ? contact.name.charAt(0).toUpperCase()
+                : '?';
+            avatarHtml = `<div class="contact-avatar">${initial}</div>`;
+        }
+
+        // Name Fallback
+        let displayName = contact.name;
+        if (displayName === 'Unknown Name' && contact.email && contact.email !== 'No Email') {
+            displayName = contact.email.split('@')[0];
+        }
+
+        // Phone/Address
+        const phone = (contact.phone && contact.phone !== 'No Phone') ? `📞 ${contact.phone}` : '';
+        const address = (contact.address && contact.address !== 'Unknown Address') ? `📍 ${contact.address}` : '';
+
+        card.innerHTML = `
+            ${avatarHtml}
+            <div class="contact-name">${displayName}</div>
+            <div class="contact-email">${contact.email !== 'No Email' ? contact.email : ''}</div>
+            <div class="contact-details">
+                ${phone ? `<div class="contact-detail-row">${phone}</div>` : ''}
+                ${address ? `<div class="contact-detail-row">${address}</div>` : ''}
+            </div>
+            <div class="contact-actions">
+                <button class="btn-primary btn-sm" onclick="alert('Quick action: Call ${displayName}')">Call</button>
+                <button class="btn-secondary btn-sm" onclick="alert('Quick action: Email ${displayName}')">Email</button>
+            </div>
+        `;
+        listContainer.appendChild(card);
+    });
+}
+
 
 // --- LEADS LOGIC ---
 

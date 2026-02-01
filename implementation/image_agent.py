@@ -107,7 +107,13 @@ def upload_to_drive(image_url, title):
     # Folder ID from user request
     FOLDER_ID = "1d71dtq308dJ7RfppeBycqSapKTpbpGOl"
     TOKEN_FILE = 'token.json'
-    SCOPES = ['https://www.googleapis.com/auth/drive.file']
+    SCOPES = [
+        'https://www.googleapis.com/auth/gmail.modify',
+        'https://www.googleapis.com/auth/calendar',
+        'https://www.googleapis.com/auth/contacts.readonly',
+        'https://www.googleapis.com/auth/drive',
+        'https://www.googleapis.com/auth/spreadsheets'
+    ]
     
     try:
         # Download image content
@@ -164,7 +170,13 @@ def log_to_sheets(title, request_prompt, drive_link, image_url):
 
         # Use OAuth2 token with Sheets scope
         from google.oauth2.credentials import Credentials
-        SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+        SCOPES = [
+            'https://www.googleapis.com/auth/gmail.modify',
+            'https://www.googleapis.com/auth/calendar',
+            'https://www.googleapis.com/auth/contacts.readonly',
+            'https://www.googleapis.com/auth/drive',
+            'https://www.googleapis.com/auth/spreadsheets'
+        ]
         creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
         
         gc = gspread.authorize(creds)
