@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+
+<body>
+    <div class="glass-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="logo-container">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="IT Solutions" class="logo-img">
+            </div>
+            <ul>
+                <li class="active" onclick="showSection('mail')">Gmail</li>
+                <li onclick="showSection('calendar')">Calendar</li>
+                <li onclick="showSection('leads')">Leads</li>
+                <li onclick="showSection('web')">Web Agent</li>
+                <li onclick="showSection('chat')">Chat Agent</li>
+                <li onclick="showSection('weather')">Weather Agent</li>
+                <li onclick="showSection('blog')">Blog Post Agent</li>
+                <li onclick="showSection('image')">Image Agent</li>
+                <li onclick="showSection('image-search')">Image Search</li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="content">
+            <!-- Mail Section -->
+            <section id="mail-section" class="active">
+                <h1>Google Mail</h1>
+
+                <div class="card" id="compose-card">
+                    <h2>Compose Email</h2>
+                    <form id="mail-form">
+                        <input type="email" id="mail-to" placeholder="To" required>
+                        <input type="text" id="mail-subject" placeholder="Subject" required>
+                        <textarea id="mail-body" placeholder="Message body..." rows="4" required></textarea>
+                        <div class="button-group">
+                            <button type="submit" class="btn-primary">Send Email</button>
+                            <button type="button" id="btn-save-draft" class="btn-secondary">Save as Draft</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="card" id="mail-detail-card" style="display: none;">
+                    <div class="header-row">
+                        <button onclick="closeMailDetail()" class="btn-icon">← Back</button>
+                        <div class="actions">
+                            <button onclick="deleteCurrentEmail()" class="btn-danger">Delete</button>
+                        </div>
+                    </div>
+                    <h2 id="detail-subject">Subject</h2>
+                    <div class="meta-row">
+                        <span id="detail-from" class="meta-from">From: ...</span>
+                        <span id="detail-date" class="meta-date"></span>
+                    </div>
+                    <div id="detail-body" class="mail-body-content"></div>
+
+                    <div class="reply-section">
+                        <h3>Reply</h3>
+                        <textarea id="reply-body" placeholder="Write a reply..." rows="3"></textarea>
+                        <button onclick="sendReply()" class="btn-primary">Send Reply</button>
+                    </div>
+                </div>
+
+                <div class="card" id="mail-list-card">
+                    <div class="header-row">
+                        <h2>Recent Emails</h2>
+                        <button onclick="fetchMail()" class="btn-icon">↻</button>
+                    </div>
+                    <div id="mail-list" class="list-container">
+                        <!-- Emails will load here -->
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Calendar Section -->
+            <section id="calendar-section" style="display: none;">
+                <h1>Google Calendar</h1>
+
+                <div class="card" id="calendar-create-card">
+                    <h2>Schedule Event</h2>
+                    <form id="calendar-form">
+                        <input type="text" id="event-summary" placeholder="Event Title" required>
+                        <input type="datetime-local" id="event-start" required>
+                        <input type="number" id="event-duration" placeholder="Duration (min)" value="60">
+                        <textarea id="event-description" placeholder="Description" rows="2"></textarea>
+                        <input type="text" id="event-attendees" placeholder="Attendees (comma-separated emails)">
+                        <button type="submit" class="btn-primary">Create Event</button>
+                    </form>
+                </div>
+
+                <div class="card" id="calendar-detail-card" style="display: none;">
+                    <div class="header-row">
+                        <button onclick="closeEventDetail()" class="btn-icon">← Back</button>
+                        <div class="actions">
+                            <button onclick="deleteCurrentEvent()" class="btn-danger">Delete</button>
+                        </div>
+                    </div>
+                    <form id="calendar-update-form">
+                        <input type="hidden" id="update-event-id">
+                        <label>Title</label>
+                        <input type="text" id="update-event-summary" placeholder="Event Title" required>
+                        <label>Start Time</label>
+                        <input type="datetime-local" id="update-event-start" required>
+                        <label>Duration (min)</label>
+                        <input type="number" id="update-event-duration" placeholder="Duration (min)">
+                        <label>Description</label>
+                        <textarea id="update-event-description" placeholder="Description" rows="2"></textarea>
+                        <label>Attendees</label>
+                        <input type="text" id="update-event-attendees" placeholder="Attendees (comma-separated)">
+
+                        <button type="submit" class="btn-primary" style="margin-top: 15px;">Update Event</button>
+                    </form>
+                </div>
+
+                <div class="card" id="calendar-list-card">
+                    <div class="header-row">
+                        <h2>Upcoming Events</h2>
+                        <button onclick="fetchCalendar()" class="btn-icon">↻</button>
+                    </div>
+                    <div id="event-list" class="list-container">
+                        <!-- Events will load here -->
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Leads Section -->
+            <section id="leads-section" style="display: none;">
+                <h1>Leads Generation</h1>
+
+                <div class="card">
+                    <h2>Search Leads</h2>
+                    <form id="leads-form">
+                        <input type="text" id="lead-query" placeholder="Job Title (e.g. CEO)" required>
+                        <input type="text" id="lead-location" placeholder="Location (e.g. San Francisco)" required>
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" id="lead-mock" checked>
+                                <span style="font-size: 0.9em;">Use Mock Data (Testing)</span>
+                            </label>
+                        </div>
+                        <button type="submit" class="btn-primary">Search Leads</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="header-row">
+                        <h2>Results</h2>
+                    </div>
+                    <div id="leads-list" class="list-container">
+                        <div class="loading" style="display:none;">Searching...</div>
+                        <div class="placeholder-text"
+                            style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Use the form to
+                            search for leads.</div>
+                    </div>
+                </div>
+            </section>
+            </section>
+
+            <!-- Web Agent Section -->
+            <section id="web-section" style="display: none;">
+                <h1>Web Search Agent</h1>
+                <div class="card">
+                    <form id="web-form">
+                        <input type="text" id="web-query" placeholder="Enter your search query..." required>
+                        <button type="submit" class="btn-primary">Search Web</button>
+                    </form>
+                </div>
+                <div class="card" id="web-results-card" style="display: none;">
+                    <h2>Results</h2>
+                    <div id="web-results" class="list-container"></div>
+                </div>
+            </section>
+
+            <!-- Chat Agent Section -->
+            <section id="chat-section" style="display: none;">
+                <h1>Chat Agent</h1>
+                <div class="card" style="height: 60vh; display: flex; flex-direction: column;">
+                    <div id="chat-history" class="chat-container">
+                        <!-- Messages will appear here -->
+                        <div class="chat-message bot">Hello! How can I help you today?</div>
+                    </div>
+                    <form id="chat-form" style="margin-top: auto; display: flex; flex-direction: row; gap: 10px;">
+                        <input type="text" id="chat-input" placeholder="Type your message..." style="flex: 1;" required>
+                        <button type="submit" class="btn-primary">Send</button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Weather Agent Section -->
+            <section id="weather-section" style="display: none;">
+                <h1>Weather Agent</h1>
+                <div class="card">
+                    <form id="weather-form">
+                        <input type="text" id="weather-city" placeholder="Enter city name (e.g. London)" required>
+                        <button type="submit" class="btn-primary">Get Weather</button>
+                    </form>
+                </div>
+                <div id="weather-result" style="display: none;">
+                    <div class="card weather-card">
+                        <h2 id="weather-city-name">City Name</h2>
+                        <div class="weather-temp" id="weather-temp">--°C</div>
+                        <div class="weather-desc" id="weather-desc">Description</div>
+                        <div class="weather-details">
+                            <span id="weather-humidity">Humidity: --%</span>
+                            <span id="weather-wind">Wind: -- m/s</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Blog Agent Section -->
+            <section id="blog-section" style="display: none;">
+                <h1>Blog Post Agent</h1>
+                <div class="card">
+                    <form id="blog-form">
+                        <label>Topic</label>
+                        <input type="text" id="blog-topic" placeholder="e.g. AI in Healthcare" required>
+                        <label>Target Audience</label>
+                        <input type="text" id="blog-audience" placeholder="e.g. Doctors" required>
+                        <label>Telegram Chat ID (Optional)</label>
+                        <input type="text" id="blog-chat-id" placeholder="Optional chat ID">
+                        <button type="submit" class="btn-primary" style="margin-top: 15px;">Generate & Publish</button>
+                    </form>
+                </div>
+                <div id="blog-result" style="display: none;">
+                    <div class="card">
+                        <h2 id="blog-image-title">Image Title</h2>
+                        <img id="blog-image" src="" alt="Generated Image"
+                            style="max-width: 100%; border-radius: 8px; margin-bottom: 20px;">
+                        <div id="blog-content" class="mail-body-content"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Image Agent Section -->
+            <section id="image-section" style="display: none;">
+                <h1>Image Generation Agent</h1>
+                <div class="card">
+                    <form id="image-form">
+                        <label>Image Title</label>
+                        <input type="text" id="image-title" placeholder="e.g. Futuristic City" required>
+                        <label>Image Prompt</label>
+                        <textarea id="image-prompt" placeholder="Describe the image you want..." rows="3"
+                            required></textarea>
+                        <label>Telegram Chat ID (Optional)</label>
+                        <input type="text" id="image-chat-id" placeholder="Optional chat ID">
+                        <button type="submit" class="btn-primary" style="margin-top: 15px;">Generate Image</button>
+                    </form>
+                </div>
+                <div id="image-result" style="display: none;">
+                    <div class="card">
+                        <h2 id="gen-image-title">Image Title</h2>
+                        <img id="gen-image" src="" alt="Generated Image"
+                            style="max-width: 100%; border-radius: 8px; margin-bottom: 20px;">
+                        <h3>Refined Prompt:</h3>
+                        <p id="gen-image-prompt" style="font-style: italic; color: #ccc;"></p>
+                        <p id="gen-image-status" style="margin-top: 10px; font-size: 0.9em;"></p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Image Search Section -->
+            <section id="image-search-section" style="display: none;">
+                <h1>Image Search</h1>
+
+                <div class="card">
+                    <h2>Search Marketing Images</h2>
+                    <form id="image-search-form">
+                        <label>Search Query</label>
+                        <input type="text" id="search-query" placeholder="e.g. sunset, business meeting, logo" required>
+
+                        <label>Action</label>
+                        <select id="search-intent">
+                            <option value="search">Search Only (View Metadata)</option>
+                            <option value="get">Get & Send to Telegram</option>
+                        </select>
+
+                        <label>Telegram Chat ID (Required for "Get" mode)</label>
+                        <input type="text" id="search-chat-id"
+                            placeholder="Optional - only needed for Telegram delivery">
+
+                        <button type="submit" class="btn-primary" style="margin-top: 15px;">Search Image</button>
+                    </form>
+                </div>
+
+                <div id="search-result" style="display: none;">
+                    <div class="card">
+                        <h2 id="search-result-title">Search Result</h2>
+                        <div id="search-result-content"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+
+</html>

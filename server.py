@@ -1,0 +1,246 @@
+from flask import Flask, render_template, request, jsonify
+import sys
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Add implementation folder to path so we can import modules
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'implementation')))
+
+import google_mail
+import google_calendar
+import generate_mock_leads
+import scrape_apify
+import web_agent
+import chat_agent
+import weather_agent
+import blog_agent
+import image_agent
+import search_image_agent
+
+app = Flask(__name__)
+
+# Ensure token.json is accessible to the imported modules (they expect it in CWD)
+# In this simple setup, we assume server.py is running from the project root.
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+# --- MAIL ENDPOINTS ---
+
+@app.route('/api/mail/list', methods=['GET'])
+def list_mail():
+    max_results = request.args.get('max_results', default=10, type=int)
+    service = google_mail.get_service()
+    result = google_mail.list_emails(service, max_results=max_results)
+    return jsonify(result)
+
+@app.route('/api/mail/send', methods=['POST'])
+def send_mail():
+    data = request.json
+    service = google_mail.get_service()
+    result = google_mail.send_email(
+        service, 
+        to=data.get('to'), 
+        subject=data.get('subject'), 
+        body=data.get('body')
+    )
+    return jsonify(result)
+
+@app.route('/api/mail/read/<message_id>', methods=['GET'])
+def read_mail(message_id):
+    service = google_mail.get_service()
+    result = google_mail.read_email(service, message_id)
+    return jsonify(result)
+
+@app.route('/api/mail/draft', methods=['POST'])
+def create_draft():
+    data = request.json
+    service = google_mail.get_service()
+    result = google_mail.create_draft(
+        service,
+        to=data.get('to'),
+        subject=data.get('subject'),
+        body=data.get('body')
+    )
+    return jsonify(result)
+
+@app.route('/api/mail/reply', methods=['POST'])
+def reply_mail():
+    data = request.json
+    service = google_mail.get_service()
+    result = google_mail.reply_email(
+        service,
+        message_id=data.get('message_id'),
+        body=data.get('body')
+    )
+    return jsonify(result)
+
+@app.route('/api/mail/delete/<message_id>', methods=['DELETE'])
+def delete_mail(message_id):
+    service = google_mail.get_service()
+    result = google_mail.delete_email(service, message_id)
+    return jsonify(result)
+
+# --- CALENDAR ENDPOINTS ---
+
+@app.route('/api/calendar/list', methods=['GET'])
+def list_calendar():
+    max_results = request.args.get('max_results', default=10, type=int)
+    service = google_calendar.get_service()
+    result = google_calendar.list_events(service, max_results=max_results)
+    return jsonify(result)
+
+@app.route('/api/calendar/create', methods=['POST'])
+def create_event():
+    data = request.json
+    service = google_calendar.get_service()
+    result = google_calendar.create_event(
+        service, 
+        summary=data.get('summary'), 
+        start_time_str=data.get('start_time'), 
+        duration_minutes=data.get('duration_minutes', 60),
+        description=data.get('description'),
+        attendees=data.get('attendees')
+    )
+    return jsonify(result)
+
+@app.route('/api/calendar/event/<event_id>', methods=['GET'])
+def get_event(event_id):
+    service = google_calendar.get_service()
+    result = google_calendar.get_event(service, event_id)
+    return jsonify(result)
+
+@app.route('/api/calendar/update', methods=['POST'])
+def update_event():
+    data = request.json
+    service = google_calendar.get_service()
+    result = google_calendar.update_event(
+        service,
+        event_id=data.get('event_id'),
+        summary=data.get('summary'),
+        start_time_str=data.get('start_time'),
+        duration_minutes=data.get('duration_minutes'),
+        description=data.get('description'),
+        attendees=data.get('attendees')
+    )
+    return jsonify(result)
+
+@app.route('/api/calendar/delete/<event_id>', methods=['DELETE'])
+def delete_event(event_id):
+    service = google_calendar.get_service()
+    result = google_calendar.delete_event(service, event_id)
+    return jsonify(result)
+
+# --- LEADS ENDPOINTS ---
+
+@app.route('/api/leads/search', methods=['GET'])
+def search_leads():
+    query = request.args.get('query', default='CEO')
+    location = request.args.get('location', default='United States')
+    limit = request.args.get('limit', default=10, type=int)
+    mock = request.args.get('mock', default='false').lower() == 'true'
+
+    if mock:
+        try:
+            leads = generate_mock_leads.get_mock_leads(limit=limit)
+            return jsonify({'status': 'success', 'leads': leads})
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 500
+    else:
+        try:
+            # We aren't passing size/industry/email_status from UI yet, so defaults apply
+            leads = scrape_apify.scrape_leads(query=query, location=location, limit=limit)
+            return jsonify({'status': 'success', 'leads': leads})
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 500
+
+# --- WEB AGENT ENDPOINTS ---
+
+@app.route('/api/web/search', methods=['GET', 'POST'])
+def web_search():
+    if request.method == 'POST':
+        data = request.json
+        query = data.get('query')
+    else:
+        query = request.args.get('query')
+    
+    if not query:
+        return jsonify({'error': 'Query parameter is required'}), 400
+        
+    result = web_agent.search_web(query)
+    return jsonify(result)
+
+# --- CHAT AGENT ENDPOINTS ---
+
+@app.route('/api/chat/completions', methods=['POST'])
+def chat_completions():
+    data = request.json
+    messages = data.get('messages')
+    if not messages:
+        return jsonify({'error': 'Messages are required'}), 400
+    
+    result = chat_agent.chat_openai(messages)
+    return jsonify(result)
+
+# --- WEATHER AGENT ENDPOINTS ---
+
+@app.route('/api/weather/current', methods=['GET'])
+def get_weather():
+    city = request.args.get('city')
+    if not city:
+        return jsonify({'error': 'City parameter is required'}), 400
+        
+    result = weather_agent.get_weather(city)
+    return jsonify(result)
+
+# --- BLOG AGENT ENDPOINTS ---
+
+@app.route('/api/blog/generate', methods=['POST'])
+def generate_blog():
+    data = request.json
+    topic = data.get('topic')
+    audience = data.get('audience')
+    chat_id = data.get('chat_id') # Optional
+
+    if not topic or not audience:
+        return jsonify({'error': 'Topic and Audience are required'}), 400
+
+    # Run the workflow
+    result = blog_agent.generate_blog_workflow(topic, audience, chat_id)
+    return jsonify(result)
+
+# --- IMAGE AGENT ENDPOINTS ---
+
+@app.route('/api/image/generate', methods=['POST'])
+def generate_image_api():
+    data = request.json
+    title = data.get('title', 'Untitled')
+    prompt = data.get('prompt')
+    chat_id = data.get('chat_id')
+
+    if not prompt:
+        return jsonify({'error': 'Prompt is required'}), 400
+
+    result = image_agent.generate_image_workflow(title, prompt, chat_id)
+    return jsonify(result)
+
+# --- IMAGE SEARCH ENDPOINTS ---
+
+@app.route('/api/image/search', methods=['POST'])
+def search_image_api():
+    data = request.json
+    query = data.get('query')
+    intent = data.get('intent', 'search')  # 'search' or 'get'
+    chat_id = data.get('chat_id')
+
+    if not query:
+        return jsonify({'error': 'Query is required'}), 400
+
+    result = search_image_agent.search_image(query, intent, chat_id)
+    return jsonify(result)
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
