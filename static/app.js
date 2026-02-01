@@ -4,30 +4,36 @@ function showSection(sectionId) {
     document.getElementById('mail-section').style.display = 'none';
     document.getElementById('calendar-section').style.display = 'none';
     document.getElementById('leads-section').style.display = 'none';
+    document.getElementById('web-section').style.display = 'none';
+    document.getElementById('chat-section').style.display = 'none';
+    document.getElementById('weather-section').style.display = 'none';
+    document.getElementById('blog-section').style.display = 'none';
+    document.getElementById('image-section').style.display = 'none';
+    document.getElementById('image-search-section').style.display = 'none';
+    document.getElementById('faceless-section').style.display = 'none';
 
-    // Deselect menu items
-    document.querySelectorAll('.sidebar li').forEach(li => li.classList.remove('active'));
+    // Deselect dock items
+    document.querySelectorAll('.dock-item').forEach(item => item.classList.remove('active'));
 
     // Show target section
     document.getElementById(sectionId + '-section').style.display = 'block';
 
-    // Select menu item
-    const menuItems = document.querySelectorAll('.sidebar li');
-    if (sectionId === 'mail') menuItems[0].classList.add('active');
-    if (sectionId === 'calendar') menuItems[1].classList.add('active');
-    if (sectionId === 'leads') menuItems[2].classList.add('active');
+    // Select dock item
+    const dockItems = document.querySelectorAll('.dock-item');
+    if (sectionId === 'mail') dockItems[0].classList.add('active');
+    if (sectionId === 'calendar') dockItems[1].classList.add('active');
+    if (sectionId === 'leads') dockItems[2].classList.add('active');
+    if (sectionId === 'web') dockItems[3].classList.add('active');
+    if (sectionId === 'chat') dockItems[4].classList.add('active');
+    if (sectionId === 'weather') dockItems[5].classList.add('active');
+    if (sectionId === 'blog') dockItems[6].classList.add('active');
+    if (sectionId === 'image') dockItems[7].classList.add('active');
+    if (sectionId === 'image-search') dockItems[8].classList.add('active');
+    if (sectionId === 'faceless') dockItems[9].classList.add('active');
 
     // Auto load data
     if (sectionId === 'mail') fetchMail();
     if (sectionId === 'calendar') fetchCalendar();
-
-    // Update active class for new items
-    if (sectionId === 'web') menuItems[3].classList.add('active');
-    if (sectionId === 'chat') menuItems[4].classList.add('active');
-    if (sectionId === 'weather') menuItems[5].classList.add('active');
-    if (sectionId === 'blog') menuItems[6].classList.add('active');
-    if (sectionId === 'image') menuItems[7].classList.add('active');
-    if (sectionId === 'image-search') menuItems[8].classList.add('active');
 }
 
 // Format Date Utility
@@ -799,3 +805,79 @@ document.getElementById('image-search-form').addEventListener('submit', async (e
 
 // Initial Load
 showSection('mail');
+
+// --- FACELESS VIDEO LOGIC ---
+
+// Generate Video
+document.getElementById('faceless-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const subject = document.getElementById('faceless-subject').value;
+
+    // If subject is empty, we tell the backend to use the sheet
+
+    const btn = document.getElementById('btn-generate-video');
+    const resultDiv = document.getElementById('faceless-result');
+    const statusText = document.getElementById('video-status-text');
+
+    btn.disabled = true;
+    btn.innerText = 'Starting Workflow...';
+    resultDiv.style.display = 'block';
+
+    try {
+        const response = await fetch('/api/video/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                subject: subject || null // Send null to imply "read from sheet"
+            })
+        });
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            statusText.innerText = 'Workflow started! Job ID: ' + data.project_id;
+            pollVideoStatus(data.project_id);
+        } else {
+            statusText.innerText = 'Error: ' + (data.message || 'Unknown error');
+            btn.disabled = false;
+            btn.innerText = 'Generate Video';
+        }
+    } catch (e) {
+        statusText.innerText = 'Network Error: ' + e;
+        btn.disabled = false;
+        btn.innerText = 'Generate Video';
+    }
+});
+
+async function pollVideoStatus(projectId) {
+    const statusText = document.getElementById('video-status-text');
+    const previewContainer = document.getElementById('video-preview-container');
+    const downloadLink = document.getElementById('video-download-link');
+
+    const interval = setInterval(async () => {
+        try {
+            const response = await fetch(`/api/video/status?project_id=${projectId}`);
+            const data = await response.json();
+
+            if (data.status === 'success') {
+                statusText.innerText = 'Status: ' + data.job_status;
+
+                if (data.job_status === 'done') {
+                    clearInterval(interval);
+                    statusText.innerText = 'Video Generated Successfully!';
+                    previewContainer.style.display = 'block';
+                    downloadLink.href = data.video_url;
+                    document.getElementById('btn-generate-video').disabled = false;
+                    document.getElementById('btn-generate-video').innerText = 'Generate Video';
+                } else if (data.job_status === 'error') {
+                    clearInterval(interval);
+                    statusText.innerText = 'Error generating video.';
+                    document.getElementById('btn-generate-video').disabled = false;
+                    document.getElementById('btn-generate-video').innerText = 'Generate Video';
+                }
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }, 5000); // Poll every 5 seconds
+}

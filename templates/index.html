@@ -13,21 +13,35 @@
 <body>
     <div class="glass-container">
         <!-- Sidebar -->
-        <nav class="sidebar">
-            <div class="logo-container">
-                <img src="{{ url_for('static', filename='logo.png') }}" alt="IT Solutions" class="logo-img">
+        <!-- Persistent Logo (Top Left) -->
+        <!-- Brand Header (Top Left) -->
+        <div class="brand-header">
+            <div class="logo-row">
+                <img src="{{ url_for('static', filename='brand-logo.jpg') }}" alt="Logo" class="brand-logo-img">
+                <div class="logo-text">itsolutions<span class="logo-accent">.mm</span></div>
             </div>
-            <ul>
-                <li class="active" onclick="showSection('mail')">Gmail</li>
-                <li onclick="showSection('calendar')">Calendar</li>
-                <li onclick="showSection('leads')">Leads</li>
-                <li onclick="showSection('web')">Web Agent</li>
-                <li onclick="showSection('chat')">Chat Agent</li>
-                <li onclick="showSection('weather')">Weather Agent</li>
-                <li onclick="showSection('blog')">Blog Post Agent</li>
-                <li onclick="showSection('image')">Image Agent</li>
-                <li onclick="showSection('image-search')">Image Search</li>
-            </ul>
+            <div class="brand-details">
+                <div class="founder-name">MR. KYAW ZIN TUN <span class="founder-role">• CEO • AI AUTOMATION</span></div>
+                <div class="brand-links">
+                    <a href="https://n8nkz.com" target="_blank">n8nkz.com</a>
+                    <span class="separator">•</span>
+                    <a href="mailto:itsolutions.mm@gmail.com" class="email-link">itsolutions.mm@gmail.com</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Icon Dock -->
+        <nav class="icon-dock">
+            <div class="dock-item active" onclick="showSection('mail')" title="Gmail">📧</div>
+            <div class="dock-item" onclick="showSection('calendar')" title="Calendar">📅</div>
+            <div class="dock-item" onclick="showSection('leads')" title="Leads">👥</div>
+            <div class="dock-item" onclick="showSection('web')" title="Web Search">🌐</div>
+            <div class="dock-item" onclick="showSection('chat')" title="AI Chat">💬</div>
+            <div class="dock-item" onclick="showSection('weather')" title="Weather">☀️</div>
+            <div class="dock-item" onclick="showSection('blog')" title="Blog Post">📝</div>
+            <div class="dock-item" onclick="showSection('image')" title="Image Gen">🎨</div>
+            <div class="dock-item" onclick="showSection('image-search')" title="Image Search">🔍</div>
+            <div class="dock-item" onclick="showSection('faceless')" title="Video">🎥</div>
         </nav>
 
         <!-- Main Content -->
@@ -298,6 +312,41 @@
                     <div class="card">
                         <h2 id="search-result-title">Search Result</h2>
                         <div id="search-result-content"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Faceless Video Section -->
+            <section id="faceless-section" style="display: none;">
+                <h1>Faceless Video Generator</h1>
+                <div class="card">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2>Create Top 10 Video</h2>
+                    </div>
+
+                    <form id="faceless-form">
+                        <p style="color: #ccc; margin-bottom: 15px; font-size: 0.9em;">
+                            Target Sheet: <a
+                                href="https://docs.google.com/spreadsheets/d/1q4w7I1DaM_mkR-XnSMCczuCnnd-G4GK5w3NDVtFF9Sc/edit#gid=0"
+                                target="_blank" style="color: #a0c4ff;">Top Ten Videos</a>
+                        </p>
+
+                        <label>Video Subject (Optional)</label>
+                        <input type="text" id="faceless-subject" placeholder="Leave empty to auto-read from Sheet">
+
+                        <button type="submit" id="btn-generate-video" class="btn-primary"
+                            style="margin-top: 15px;">Generate Video</button>
+                    </form>
+                </div>
+
+                <div id="faceless-result" style="display: none;">
+                    <div class="card">
+                        <h2>Generation Status</h2>
+                        <p id="video-status-text">Initializing...</p>
+                        <div id="video-preview-container" style="margin-top: 15px; display:none;">
+                            <a id="video-download-link" href="#" target="_blank" class="btn-primary">Download Video</a>
+                        </div>
                     </div>
                 </div>
             </section>

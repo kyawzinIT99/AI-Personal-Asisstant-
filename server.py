@@ -18,6 +18,8 @@ import weather_agent
 import blog_agent
 import image_agent
 import search_image_agent
+import stripe_utils
+import faceless_video_agent
 
 app = Flask(__name__)
 
@@ -242,5 +244,67 @@ def search_image_api():
     result = search_image_agent.search_image(query, intent, chat_id)
     return jsonify(result)
 
+# --- SUBSCRIPTION ENDPOINTS ---
+
+@app.route('/api/subscription/status', methods=['GET'])
+def subscription_status():
+    email = request.args.get('email')
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+    
+    is_subscribed = stripe_utils.check_subscription(email)
+    price_id = stripe_utils.get_premium_price_id()
+    
+    return jsonify({
+        'status': 'success',
+        'subscribed': is_subscribed,
+        'email': email,
+        'debug_price_id': price_id # For debugging
+    })
+
+@app.route('/api/subscription/checkout', methods=['POST'])
+def subscription_checkout():
+    data = request.json
+    email = data.get('email')
+    # Use request.host_url to build absolute URLs
+    base_url = request.host_url.rstrip('/')
+    success_url = f"{base_url}/?subscription=success"
+    cancel_url = f"{base_url}/?subscription=canceled"
+    
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+        
+    session_url = stripe_utils.create_checkout_session(email, success_url, cancel_url)
+    
+    if session_url:
+        return jsonify({'status': 'success', 'checkout_url': session_url})
+    else:
+        return jsonify({'status': 'error', 'message': 'Could not create checkout session'}), 500
+
+# --- FACELESS VIDEO ENDPOINTS ---
+
+@app.route('/api/video/generate', methods=['POST'])
+def generate_video():
+    data = request.json
+    subject = data.get('subject')
+    email = data.get('email')
+    
+    
+    if not subject:
+        return jsonify({'error': 'Subject is required'}), 400
+        
+    # 2. Start Generation
+    result = faceless_video_agent.generate_video_for_subject(subject)
+    return jsonify(result)
+
+@app.route('/api/video/status', methods=['GET'])
+def video_status():
+    project_id = request.args.get('project_id')
+    if not project_id:
+         return jsonify({'error': 'Project ID is required'}), 400
+         
+    result = faceless_video_agent.check_video_status(project_id)
+    return jsonify(result)
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5001)
