@@ -46,8 +46,14 @@ def get_weather(city_query, units="metric"):
         logger.error("OPENWEATHER_API_KEY not found in environment variables")
         return {"error": "OpenWeatherMap API key not configured"}
     
+    # Handle None or empty city_query
+    if not city_query or str(city_query).strip() == "":
+        return {"error": "City name is required. Please specify a city."}
+    
+    city_query = str(city_query).strip()
+    
     # Extract clean city name if query looks like a sentence (contains spaces)
-    if " " in city_query.strip():
+    if " " in city_query:
         city_name = extract_city(city_query)
         logger.info(f"Extracted city '{city_name}' from query '{city_query}'")
     else:

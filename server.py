@@ -350,4 +350,5 @@ def authorize_google():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    # Run without debug mode to avoid termios/reloader issues in background
+    app.run(debug=False, port=5001)

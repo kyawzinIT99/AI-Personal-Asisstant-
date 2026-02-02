@@ -44,12 +44,29 @@ def get_service():
     except Exception as e:
         raise Exception(f"Failed to load credentials: {str(e)}")
 
-def list_events(service, max_results=10):
+def list_events(service, max_results=10, date_filter=None):
     try:
-        now = datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
-        events_result = service.events().list(calendarId='primary', timeMin=now,
-                                              maxResults=max_results, singleEvents=True,
-                                              orderBy='startTime').execute()
+        if date_filter == 'tomorrow':
+            target_date = datetime.now() + timedelta(days=1)
+            time_min = target_date.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + 'Z'
+            time_max = target_date.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat() + 'Z'
+        elif date_filter == 'today':
+            target_date = datetime.now()
+            time_min = target_date.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + 'Z'
+            time_max = target_date.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat() + 'Z'
+        else:
+            time_min = datetime.now().isoformat() + 'Z'
+            time_max = None
+
+        events_result = service.events().list(
+            calendarId='primary', 
+            timeMin=time_min,
+            timeMax=time_max,
+            maxResults=max_results, 
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+        
         events = events_result.get('items', [])
         
         output_events = []
@@ -68,7 +85,7 @@ def list_events(service, max_results=10):
                 "eventType": event.get('eventType', 'default')
             })
             
-        return {"status": "success", "events": output_events}
+        return {"status": "success", "events": output_events, "date_filter": date_filter}
     except HttpError as error:
         return {"status": "error", "message": str(error)}
 
@@ -139,20 +156,30 @@ def update_event(service, event_id, summary=None, start_time_str=None, duration_
         if start_time_str:
             try:
                 start_dt = datetime.fromisoformat(start_time_str)
+                
+                # Calculate duration from EXISTING event details before we overwrite them
+                # Use replace('Z',...) to handle UTC 'Z' notation if present
+                current_start_str = event['start'].get('dateTime', '')
+                current_end_str = event['end'].get('dateTime', '')
+                
+                duration = timedelta(minutes=60) # Default
+                
+                if current_start_str and current_end_str:
+                    old_start = datetime.fromisoformat(current_start_str.replace('Z', '+00:00'))
+                    old_end = datetime.fromisoformat(current_end_str.replace('Z', '+00:00'))
+                    duration = old_end - old_start
+
+                # Now apply new start time
                 event['start']['dateTime'] = start_dt.isoformat()
-                # If duration provided, recalc end, else keep duration same as before?
-                # For simplicity, if time changes, we require duration or assume 60 or keep existing duration.
-                # Let's check existing duration if duration_minutes not provided.
+                
+                # Calculate new end time
                 if duration_minutes:
                     end_dt = start_dt + timedelta(minutes=duration_minutes)
-                    event['end']['dateTime'] = end_dt.isoformat()
                 else:
-                    # Keep same duration
-                    old_start = datetime.fromisoformat(event['start'].get('dateTime').replace('Z', '+00:00'))
-                    old_end = datetime.fromisoformat(event['end'].get('dateTime').replace('Z', '+00:00'))
-                    duration = old_end - old_start
+                    # Maintain existing duration
                     end_dt = start_dt + duration
-                    event['end']['dateTime'] = end_dt.isoformat()
+                
+                event['end']['dateTime'] = end_dt.isoformat()
             except ValueError:
                 return {"status": "error", "message": "Invalid start_time format"}
         elif duration_minutes:
@@ -194,6 +221,7 @@ def main():
     parser = argparse.ArgumentParser(description='Google Calendar Tool')
     parser.add_argument('--action', required=True, choices=['list', 'create'])
     parser.add_argument('--max_results', type=int, default=10, help='Max results for list')
+    parser.add_argument('--date', help='Date filter for list (today, tomorrow)')
     parser.add_argument('--summary', help='Event summary')
     parser.add_argument('--start_time', help='Event start time (ISO)')
     parser.add_argument('--duration_minutes', type=int, default=60, help='Event duration in minutes')
@@ -203,7 +231,7 @@ def main():
     service = get_service()
     
     if args.action == 'list':
-        print(json.dumps(list_events(service, args.max_results)))
+        print(json.dumps(list_events(service, args.max_results, args.date)))
         
     elif args.action == 'create':
         if not args.summary or not args.start_time:

@@ -27,15 +27,37 @@ def get_service():
 
 def send_email(service, to, subject, body):
     try:
+        # Hard defensive check
+        if service is None:
+             return {"status": "error", "message": "Gmail service is not initialized"}
+        
+        # Validate recipient email
+        if not to or str(to).strip() == "":
+            return {"status": "error", "message": "Recipient email address is required. Please provide a valid 'to' email address."}
+             
+        to = str(to).strip()
+        subject = str(subject or "(No Subject)")
+        body = str(body or "")
+        
+        # Basic email format validation
+        if "@" not in to:
+            return {"status": "error", "message": f"Invalid email format: '{to}'. Please provide a valid email address."}
+        
+        print(f"DEBUG: Sending email to={to}, subject={subject}")
+        
         message = MIMEText(body)
         message['to'] = to
         message['subject'] = subject
-        raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
-        body = {'raw': raw}
         
-        message = service.users().messages().send(userId='me', body=body).execute()
+        # Use as_string().encode() for maximum compatibility
+        raw = base64.urlsafe_b64encode(message.as_string().encode('utf-8')).decode('utf-8')
+        payload = {'raw': raw}
+        
+        message = service.users().messages().send(userId='me', body=payload).execute()
+        print(f"DEBUG: Email sent successfully, message_id={message['id']}")
         return {"status": "success", "message_id": message['id']}
-    except HttpError as error:
+    except Exception as error:
+        print(f"DEBUG: send_email error: {error}")
         return {"status": "error", "message": str(error)}
 
 def list_emails(service, max_results=10, query=None):
@@ -104,16 +126,29 @@ def read_email(service, message_id):
         return {"status": "error", "message": str(error)}
 
 def create_draft(service, to, subject, body):
-    if not to or not subject or not body:
-        return {"status": "error", "message": "Missing required fields: to, subject, or body"}
+    # Validate recipient email
+    if not to or str(to).strip() == "":
+        return {"status": "error", "message": "Recipient email address is required. Please provide a valid 'to' email address."}
+    
+    to = str(to).strip()
+    
+    # Basic email format validation
+    if "@" not in to:
+        return {"status": "error", "message": f"Invalid email format: '{to}'. Please provide a valid email address."}
+    
+    if not subject or not body:
+        # Allow empty body/subject for drafts, but warn
+        subject = subject or "(No Subject)"
+        body = body or ""
+    
     try:
         message = MIMEText(body)
         message['to'] = to
         message['subject'] = subject
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
-        body = {'message': {'raw': raw}}
+        draft_body = {'message': {'raw': raw}}
         
-        draft = service.users().drafts().create(userId='me', body=body).execute()
+        draft = service.users().drafts().create(userId='me', body=draft_body).execute()
         return {"status": "success", "draft_id": draft['id'], "message": "Draft created successfully"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
