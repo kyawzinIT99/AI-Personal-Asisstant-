@@ -32,16 +32,28 @@
 
         <!-- Bottom Icon Dock -->
         <nav class="icon-dock">
-            <div class="dock-item active" onclick="showSection('mail')" title="Gmail">📧</div>
-            <div class="dock-item" onclick="showSection('calendar')" title="Calendar">📅</div>
-            <div class="dock-item" onclick="showSection('leads')" title="Leads">👥</div>
-            <div class="dock-item" onclick="showSection('contacts')" title="Contacts">📇</div>
+            <div class="dock-item active" onclick="showSection('mail')" title="Gmail">
+                <img src="{{ url_for('static', filename='icon-mail.png') }}" alt="Mail" class="dock-icon-img">
+            </div>
+            <div class="dock-item" onclick="showSection('calendar')" title="Calendar">
+                <img src="{{ url_for('static', filename='icon-calendar.png') }}" alt="Calendar" class="dock-icon-img">
+            </div>
+            <div class="dock-item" onclick="showSection('leads')" title="Leads">
+                <img src="{{ url_for('static', filename='icon-leads.png') }}" alt="Leads" class="dock-icon-img">
+            </div>
+            <div class="dock-item" onclick="showSection('contacts')" title="Contacts">
+                <img src="{{ url_for('static', filename='icon-contacts.png') }}" alt="Contacts" class="dock-icon-img">
+            </div>
             <div class="dock-item" onclick="showSection('web')" title="Web Search">🌐</div>
             <div class="dock-item" onclick="showSection('chat')" title="AI Chat">💬</div>
             <div class="dock-item" onclick="showSection('weather')" title="Weather">☀️</div>
             <div class="dock-item" onclick="showSection('blog')" title="Blog Post">📝</div>
             <div class="dock-item" onclick="showSection('image')" title="Image Gen">🎨</div>
             <div class="dock-item" onclick="showSection('image-search')" title="Image Search">🔍</div>
+            <div class="dock-item" onclick="showSection('clickup')" title="ClickUp CRM">
+                <img src="{{ url_for('static', filename='clickup-logo-vibrant.png') }}" alt="ClickUp"
+                    class="dock-icon-img">
+            </div>
             <div class="dock-item" onclick="showSection('faceless')" title="Video">🎥</div>
         </nav>
 
@@ -334,6 +346,52 @@
                 </div>
             </section>
 
+            <!-- ClickUp CRM Section -->
+            <section id="clickup-section" style="display: none;">
+                <h1>
+                    <img src="/static/clickup-logo-vibrant.png" alt="ClickUp Logo" class="brand-logo"
+                        style="width: 40px; height: 40px; vertical-align: middle; margin-right: 10px;">
+                    ClickUp CRM
+                </h1>
+
+                <div class="card">
+                    <h2>Fetch Task / Invoice</h2>
+                    <form id="clickup-task-form">
+                        <input type="text" id="clickup-task-id"
+                            placeholder="Enter Task Name or ID (e.g. John Doe or 2kzm2vrn-698)" required>
+                        <button type="submit" class="btn-primary">Get Details</button>
+                    </form>
+                </div>
+
+                <div id="clickup-detail-card" class="card" style="display: none;">
+                    <div class="header-row">
+                        <button onclick="document.getElementById('clickup-detail-card').style.display='none'"
+                            class="btn-icon">×</button>
+                        <h2>Task Details</h2>
+                    </div>
+                    <div id="clickup-task-content" class="mail-body-content"></div>
+                </div>
+
+                <div class="card">
+                    <h2>Create Task</h2>
+                    <form id="clickup-create-form">
+                        <input type="text" id="clickup-task-name" placeholder="Task Name" required>
+                        <textarea id="clickup-task-desc" placeholder="Description" rows="3"></textarea>
+                        <button type="submit" class="btn-primary">Create Task</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="header-row">
+                        <h2>Recent Tasks</h2>
+                        <button onclick="fetchClickUpTasks()" class="btn-icon">↻</button>
+                    </div>
+                    <div id="clickup-tasks-list" class="list-container">
+                        <div class="loading">Click refresh to load tasks</div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Faceless Video Section -->
             <section id="faceless-section" style="display: none;">
                 <h1>Faceless Video Generator</h1>
@@ -363,7 +421,8 @@
                         <h2>Generation Status</h2>
                         <p id="video-status-text">Initializing...</p>
                         <div id="video-preview-container" style="margin-top: 15px; display:none;">
-                            <a id="video-download-link" href="#" target="_blank" class="btn-primary">Download Video</a>
+                            <a id="video-download-link" href="#" target="_blank" class="btn-primary">Download
+                                Video</a>
                         </div>
                     </div>
                 </div>

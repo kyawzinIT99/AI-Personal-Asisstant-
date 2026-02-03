@@ -41,7 +41,9 @@ body {
     justify-content: center;
     align-items: center;
     overflow: hidden;
+    /* Fixed background for the entire app */
     background: radial-gradient(circle at top right, #1e293b, #0f172a);
+    background-attachment: fixed;
 }
 
 /* Glass Main Container */
@@ -59,13 +61,24 @@ body {
 
 /* Brand Header (Fixed Top Left) */
 .brand-header {
-    position: absolute;
-    top: 25px;
-    left: 40px;
-    z-index: 100;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 25px 40px 15px 40px;
+    z-index: 1000;
     display: flex;
     flex-direction: column;
     gap: 4px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, var(--bg-color) 60%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.brand-header>* {
+    pointer-events: auto;
+    /* Re-enable pointer events for actual links/logo */
 }
 
 .logo-row {
@@ -200,6 +213,14 @@ body {
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
+.dock-icon-img {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.2));
+}
+
+
 .dock-item.active {
     background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
     transform: translateY(-8px) scale(1.1);
@@ -236,13 +257,27 @@ body {
 .content {
     flex: 1;
     width: 100%;
-    height: 100vh;
-    padding: 80px 40px 120px 40px;
-    /* Top padding for logo, Bottom for dock */
+    padding: 180px 40px 160px 40px;
     overflow-y: auto;
     background: radial-gradient(circle at bottom center, rgba(6, 182, 212, 0.05), transparent 60%);
     max-width: 1200px;
     align-self: center;
+    position: relative;
+    z-index: 10;
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-start) transparent;
+
+    /* Premium Scrolling Fade Mask */
+    mask-image: linear-gradient(to bottom,
+            transparent 0%,
+            black 15%,
+            black 85%,
+            transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom,
+            transparent 0%,
+            black 15%,
+            black 85%,
+            transparent 100%);
 }
 
 /* Smooth Navigation Animation */
@@ -605,4 +640,95 @@ textarea::placeholder {
     background: rgba(255, 255, 255, 0.1);
     border-color: var(--accent-start);
     box-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* --- Responsive Layout Fixes --- */
+
+@media (max-width: 768px) {
+
+    /* Simplify Brand Header */
+    .brand-header {
+        top: 15px;
+        left: 20px;
+        gap: 2px;
+    }
+
+    .brand-logo-img {
+        height: 36px;
+        width: 36px;
+    }
+
+    .logo-text {
+        font-size: 20px;
+    }
+
+    .brand-details {
+        display: none !important;
+        /* Hide founder details on mobile */
+    }
+
+    /* Adjust Content Spacing */
+    .content {
+        padding: 160px 20px 140px 20px;
+        mask-image: linear-gradient(to bottom,
+                transparent 0%,
+                black 10%,
+                black 90%,
+                transparent 100%);
+        -webkit-mask-image: linear-gradient(to bottom,
+                transparent 0%,
+                black 10%,
+                black 90%,
+                transparent 100%);
+    }
+
+    /* Optimize Dock for small screens */
+    .icon-dock {
+        bottom: 20px;
+        padding: 8px 15px;
+        gap: 10px;
+    }
+
+    .dock-item {
+        width: 42px;
+        height: 42px;
+        font-size: 20px;
+    }
+
+    .dock-icon-img {
+        width: 28px;
+        height: 28px;
+    }
+
+    h1 {
+        font-size: 24px;
+        margin-bottom: 20px;
+    }
+
+    .card {
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+}
+
+/* Extra small devices */
+@media (max-width: 480px) {
+    .content {
+        padding: 140px 15px 120px 15px;
+        /* Adjust for smaller screens */
+    }
+
+    .logo-text {
+        font-size: 18px;
+    }
+
+    .dock-item {
+        width: 38px;
+        height: 38px;
+    }
+
+    .dock-icon-img {
+        width: 24px;
+        height: 24px;
+    }
 }

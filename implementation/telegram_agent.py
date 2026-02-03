@@ -23,6 +23,7 @@ import blog_agent
 import faceless_video_agent
 import stripe_utils
 import scrape_apify
+import clickup_agent
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ALLOWED_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -82,6 +83,9 @@ def parse_intent(text):
     - video_gen: {{"subject": "video subject"}}
     - video_status: {{"project_id": "optional id"}}
     - subscription_status: {{"email": "email address"}}
+    - clickup_task: {{"task_id": "id derived from text"}}
+    - clickup_create: {{"name": "task name", "list_id": "optional list id", "description": "optional"}}
+    - clickup_list: {{"list_id": "optional list id"}}
     - chat: {{"query": "original text"}} (fallback for general questions)
 
     Rules for calendar_list:
@@ -171,6 +175,23 @@ def parse_intent(text):
       * "am I subscribed?" → {{"intent": "subscription_status", "params": {{}}}}
       * "check subscription for test@example.com" → {{"intent": "subscription_status", "params": {{"email": "test@example.com"}}}}
 
+    Rules for clickup_task:
+    - Recognize "clickup task", "check invoice", "get clickup status"
+    - Extract the task search ID or invoice ID
+    - Examples:
+      * "check clickup invoice 2kzm2vrn-698" → {{"intent": "clickup_task", "params": {{"task_id": "2kzm2vrn-698"}}}}
+      * "show clickup task abc-123" → {{"intent": "clickup_task", "params": {{"task_id": "abc-123"}}}}
+
+    Rules for clickup_create:
+    - Recognize "add to clickup", "create clickup task", "add crm lead"
+    - Extract name and description
+    - Examples:
+      * "add crm lead for John Doe to ClickUp" → {{"intent": "clickup_create", "params": {{"name": "CRM Lead: John Doe", "description": "New lead from Telegram"}}}}
+
+    Rules for clickup_list:
+    - Recognize "list clickup", "show my clickup tasks"
+    - Examples:
+      * "list my clickup tasks" → {{"intent": "clickup_list", "params": {{"list_id": null}}}}
     Other rules:
     - Return ONLY valid JSON
     - If the user asks for "tomorrow's schedule", intent is calendar_list with date="tomorrow"
@@ -239,6 +260,8 @@ def handle_command(text, chat_id):
 • "Weather in [city]"
 • "Am I subscribed?"
 • "Find image of [query]"
+• "Check ClickUp invoice [id]"
+• "List ClickUp tasks"
 
 Example: _"Write a blog about AI and send it to me"_
 """
@@ -624,6 +647,83 @@ Example: _"Write a blog about AI and send it to me"_
                     # link = stripe_utils.create_checkout_session(email, "...", "...")
                     # send_message(chat_id, f"Subscribe here: {link}")
 
+        elif intent == "clickup_task":
+            task_id = params.get("task_id")
+            if not task_id:
+                send_message(chat_id, "❌ Please provide a ClickUp Task ID. Example: 'Check clickup task 123'")
+            else:
+                send_message(chat_id, f"🔍 Fetching ClickUp task `{task_id}`...")
+                result = clickup_agent.get_task(task_id)
+                if result['status'] == 'success':
+                    task = result['task']
+                    msg = f"📌 *ClickUp Task Details*:\n\n"
+                    msg += f"*Name*: {task.get('name')}\n"
+                    msg += f"*Status*: {task.get('status', {}).get('status', 'N/A')}\n"
+                    msg += f"*URL*: [View in ClickUp]({task.get('url')})\n"
+                    if task.get('description'):
+                        msg += f"\n*Description*: {task.get('description')[:200]}..."
+                    send_message(chat_id, msg)
+                else:
+                    send_message(chat_id, f"❌ ClickUp error: {result['message']}")
+
+        elif intent == "clickup_create":
+            name = params.get("name")
+            list_id = params.get("list_id") or os.getenv("CLICKUP_LIST_ID")
+            description = params.get("description", "Created via Telegram")
+            
+            if not name:
+                send_message(chat_id, "❌ Please provide a name for the task.")
+            elif not list_id:
+                send_message(chat_id, "❌ ClickUp List ID is not configured. Please set CLICKUP_LIST_ID in .env")
+            else:
+                send_message(chat_id, f"🆕 Creating ClickUp task '{name}'...")
+                result = clickup_agent.create_task(list_id, name, description)
+                if result['status'] == 'success':
+                    task = result['task']
+                    send_message(chat_id, f"✅ Task created successfully!\n🔗 [View in ClickUp]({task.get('url')})")
+                else:
+                    send_message(chat_id, f"❌ ClickUp error: {result['message']}")
+
+        elif intent == "clickup_list":
+            list_id = params.get("list_id") or os.getenv("CLICKUP_LIST_ID")
+            if not list_id:
+                send_message(chat_id, "❌ ClickUp List ID is not configured.")
+            else:
+                send_message(chat_id, "📋 Fetching ClickUp tasks...")
+                result = clickup_agent.list_tasks(list_id)
+                if result['status'] == 'success':
+                    tasks = result['tasks']
+                    if not tasks:
+                        send_message(chat_id, "ℹ️ No tasks found in this list.")
+                    else:
+                        msg = f"📋 *ClickUp Tasks ({len(tasks)})*:\n\n"
+                        for t in tasks[:10]: # Limit to 10
+                            msg += f"• *{t['name']}* (`{t['status']['status']}`)\n"
+                        send_message(chat_id, msg)
+                else:
+                    send_message(chat_id, f"❌ ClickUp error: {result['message']}")
+
+        elif intent == "clickup_search":
+            query = params.get("query")
+            list_id = params.get("list_id") or os.getenv("CLICKUP_LIST_ID")
+            if not query:
+                send_message(chat_id, "❌ Please specify a search term. Example: 'Search ClickUp for John'")
+            elif not list_id:
+                send_message(chat_id, "❌ ClickUp List ID is not configured.")
+            else:
+                send_message(chat_id, f"🔍 Searching ClickUp for '{query}'...")
+                result = clickup_agent.search_tasks(list_id, query)
+                if result['status'] == 'success':
+                    tasks = result['tasks']
+                    if not tasks:
+                        send_message(chat_id, f"ℹ️ No tasks found matching '{query}'.")
+                    else:
+                        msg = f"🔍 *Search Results for '{query}' ({len(tasks)})*:\n\n"
+                        for t in tasks[:10]:
+                            msg += f"• *{t['name']}* (`{t['id']}`)\n"
+                        send_message(chat_id, msg)
+                else:
+                    send_message(chat_id, f"❌ ClickUp error: {result['message']}")
         else: # Default Chat
             # Inject system prompt so the specialized agent knows its own capabilities
             system_prompt = """

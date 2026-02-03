@@ -3,7 +3,7 @@ function showSection(sectionId) {
     const sections = [
         'mail', 'calendar', 'leads', 'web', 'chat',
         'weather', 'blog', 'image', 'image-search',
-        'faceless', 'contacts'
+        'clickup', 'faceless', 'contacts'
     ];
 
     // Hide all sections
@@ -34,7 +34,8 @@ function showSection(sectionId) {
         if (sectionId === 'blog') dockItems[7].classList.add('active');
         if (sectionId === 'image') dockItems[8].classList.add('active');
         if (sectionId === 'image-search') dockItems[9].classList.add('active');
-        if (sectionId === 'faceless') dockItems[10].classList.add('active');
+        if (sectionId === 'clickup') dockItems[10].classList.add('active');
+        if (sectionId === 'faceless') dockItems[11].classList.add('active');
     }
 
     // Auto load data
@@ -927,7 +928,9 @@ document.getElementById('image-search-form').addEventListener('submit', async (e
         const data = await response.json();
 
         if (data.status === 'error') {
-            alert('Error: ' + data.message);
+            resultDiv.style.display = 'block';
+            resultContent.innerHTML = `<p style="color: #ff6b6b;"><strong>Error:</strong> ${data.message}</p>`;
+            resultDiv.scrollIntoView({ behavior: 'smooth' });
             return;
         }
 
@@ -953,9 +956,12 @@ document.getElementById('image-search-form').addEventListener('submit', async (e
             }
 
             resultContent.innerHTML = html;
-            alert('Image found!');
+            resultDiv.scrollIntoView({ behavior: 'smooth' });
         } else {
-            alert('Image not found in database. Try different keywords.');
+            resultDiv.style.display = 'block';
+            document.getElementById('search-result-title').innerText = 'Not Found';
+            resultContent.innerHTML = `<p>Image not found in database. Try different keywords like 'logo' or 'business'.</p>`;
+            resultDiv.scrollIntoView({ behavior: 'smooth' });
         }
     } catch (error) {
         alert('Network error: ' + error);
@@ -1043,3 +1049,160 @@ async function pollVideoStatus(projectId) {
         }
     }, 5000); // Poll every 5 seconds
 }
+
+// --- CLICKUP CRM LOGIC ---
+
+async function fetchClickUpTasks() {
+    const listContainer = document.getElementById('clickup-tasks-list');
+    listContainer.innerHTML = '<div class="loading">Fetching tasks...</div>';
+
+    // We need a list_id. Usually we'd get them from the user or .env
+    // Here we'll try to list tasks for the default list if configured in .env
+    // But since we are on the frontend, let's just use a placeholder for now
+    // or ask the server for the default list.
+
+    try {
+        // Let's assume there's a default list configured or we at least try "0" to see error
+        const response = await fetch('/api/clickup/list/0');
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            listContainer.innerHTML = '';
+            if (data.tasks.length === 0) {
+                listContainer.innerHTML = '<div class="placeholder-text">No tasks found.</div>';
+            } else {
+                data.tasks.forEach(task => {
+                    const item = document.createElement('div');
+                    item.className = 'list-item';
+                    item.onclick = () => viewClickUpTask(task.id);
+                    item.innerHTML = `
+                        <div class="list-item-title">${task.name}</div>
+                        <div class="list-item-subtitle">Status: ${task.status.status}</div>
+                    `;
+                    listContainer.appendChild(item);
+                });
+            }
+        } else {
+            listContainer.innerHTML = `<div class="loading">Error: ${data.message}</div>`;
+        }
+    } catch (error) {
+        listContainer.innerHTML = `<div class="loading">Network Error: ${error}</div>`;
+    }
+}
+
+async function viewClickUpTask(taskId) {
+    const detailCard = document.getElementById('clickup-detail-card');
+    const content = document.getElementById('clickup-task-content');
+    detailCard.style.display = 'block';
+    content.innerHTML = '<div class="loading">Loading details...</div>';
+
+    try {
+        const response = await fetch(`/api/clickup/task/${taskId}`);
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            const t = data.task;
+            content.innerHTML = `
+                <p><strong>Name:</strong> ${t.name}</p>
+                <p><strong>Status:</strong> ${t.status.status}</p>
+                <p><strong>Description:</strong> ${t.description || 'No description'}</p>
+                <p><strong>URL:</strong> <a href="${t.url}" target="_blank" style="color: #a0c4ff;">View in ClickUp</a></p>
+                <p><strong>List:</strong> ${t.list.name}</p>
+            `;
+        } else {
+            content.innerHTML = `<div class="loading">Error: ${data.message}</div>`;
+        }
+    } catch (error) {
+        content.innerHTML = `<div class="loading">Network Error: ${error}</div>`;
+    }
+}
+
+document.getElementById('clickup-task-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('clickup-task-id').value.trim();
+
+    // Check if it looks like a Task ID (e.g. 2kzm2vrn-698)
+    // ClickUp Task IDs are usually alphanumeric and often contain a hyphen.
+    // If it contains spaces or is longer/short of typical ID pattern, we search by name.
+    const isIdPattern = /^[a-z0-9-]+$/i.test(input) && input.length >= 7 && input.length <= 15;
+
+    if (isIdPattern) {
+        viewClickUpTask(input);
+    } else {
+        // Assume it's a search name
+        searchClickUpTasks(input);
+    }
+});
+
+async function searchClickUpTasks(query) {
+    // Hide detail card and clear previous errors
+    document.getElementById('clickup-detail-card').style.display = 'none';
+
+    const listContainer = document.getElementById('clickup-tasks-list');
+    listContainer.innerHTML = '<div class="loading">Searching tasks...</div>';
+
+    // Switch to CRM tab view if not already
+    showSection('clickup-section');
+
+    try {
+        const response = await fetch(`/api/clickup/search?query=${encodeURIComponent(query)}`);
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            listContainer.innerHTML = '';
+            if (data.tasks.length === 0) {
+                listContainer.innerHTML = `<div class="placeholder-text">No tasks found for "${query}".</div>`;
+            } else {
+                data.tasks.forEach(task => {
+                    const item = document.createElement('div');
+                    item.className = 'list-item';
+                    item.onclick = () => viewClickUpTask(task.id);
+                    item.innerHTML = `
+                        <div class="list-item-title">${task.name}</div>
+                        <div class="list-item-subtitle">Status: ${task.status.status}</div>
+                    `;
+                    listContainer.appendChild(item);
+                });
+            }
+        } else {
+            listContainer.innerHTML = `<div class="loading">Error: ${data.message}</div>`;
+        }
+    } catch (error) {
+        listContainer.innerHTML = `<div class="loading">Network error: ${error}</div>`;
+    }
+}
+
+document.getElementById('clickup-create-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button');
+    btn.innerText = 'Creating...';
+    btn.disabled = true;
+
+    const payload = {
+        name: document.getElementById('clickup-task-name').value,
+        description: document.getElementById('clickup-task-desc').value,
+        list_id: "0" // Placeholder, should ideally be selectable
+    };
+
+    try {
+        const response = await fetch('/api/clickup/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            alert('Task created successfully!');
+            e.target.reset();
+            fetchClickUpTasks();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    } catch (error) {
+        alert('Network error: ' + error);
+    } finally {
+        btn.innerText = 'Create Task';
+        btn.disabled = false;
+    }
+});

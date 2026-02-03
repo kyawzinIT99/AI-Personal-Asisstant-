@@ -1,0 +1,11 @@
+venv/
+.git/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.tmp/
+brain/
+*.log
+mount_methods.txt

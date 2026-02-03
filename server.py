@@ -23,6 +23,8 @@ import stripe_utils
 import faceless_video_agent
 import google_contacts
 import verify_google_creds
+import clickup_agent
+from telegram_agent import handle_command, ALLOWED_CHAT_ID
 
 app = Flask(__name__)
 
@@ -337,6 +339,54 @@ def search_contacts():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 401
 
+
+# --- CLICKUP ENDPOINTS ---
+
+@app.route('/api/clickup/task/<task_id>', methods=['GET'])
+def get_clickup_task(task_id):
+    result = clickup_agent.get_task(task_id)
+    return jsonify(result)
+
+@app.route('/api/clickup/create', methods=['POST'])
+def create_clickup_task():
+    data = request.json
+    list_id = data.get('list_id')
+    if not list_id or list_id == "0":
+        list_id = os.getenv("CLICKUP_LIST_ID")
+        
+    name = data.get('name')
+    description = data.get('description', '')
+    
+    if not list_id or not name:
+        return jsonify({'error': 'List ID and Name are required (and CLICKUP_LIST_ID is not set in .env)'}), 400
+        
+    result = clickup_agent.create_task(list_id, name, description)
+    return jsonify(result)
+
+@app.route('/api/clickup/list/<list_id>', methods=['GET'])
+def list_clickup_tasks(list_id):
+    if not list_id or list_id == "0":
+        list_id = os.getenv("CLICKUP_LIST_ID")
+        
+    if not list_id:
+         return jsonify({'status': 'error', 'message': 'No List ID provided and CLICKUP_LIST_ID not set.'}), 400
+
+    result = clickup_agent.list_tasks(list_id)
+    return jsonify(result)
+
+@app.route('/api/clickup/search', methods=['GET'])
+def search_clickup_tasks():
+    query = request.args.get('query')
+    list_id = request.args.get('list_id') or os.getenv("CLICKUP_LIST_ID")
+    if not query:
+        return jsonify({"status": "error", "message": "Search query is required."}), 400
+    
+    if not list_id:
+        return jsonify({'status': 'error', 'message': 'No List ID provided and CLICKUP_LIST_ID not set.'}), 400
+
+    result = clickup_agent.search_tasks(list_id, query)
+    return jsonify(result)
+
 @app.route('/api/auth/google', methods=['GET'])
 def authorize_google():
     try:
@@ -346,6 +396,39 @@ def authorize_google():
         else:
             return jsonify({"status": "error", "message": "Authentication failed or cancelled."}), 500
     except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# --- TELEGRAM WEBHOOK ---
+
+@app.route('/api/telegram/webhook', methods=['POST'])
+def telegram_webhook():
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"status": "error", "message": "No data received"}), 400
+
+        # Telegram sends the message in 'message' object
+        message = data.get('message')
+        if not message:
+            return jsonify({"status": "ignored", "message": "No message object"}), 200
+
+        chat_id = str(message.get('chat', {}).get('id'))
+        text = message.get('text')
+
+        # Security check: only respond to the configured chat ID
+        if ALLOWED_CHAT_ID and chat_id != str(ALLOWED_CHAT_ID):
+            print(f"Unauthorized access attempt from Chat ID: {chat_id}")
+            return jsonify({"status": "forbidden"}), 403
+
+        if text:
+            print(f"Webhook received message: {text}")
+            handle_command(text, chat_id)
+
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        traceback_print_exc = traceback.format_exc()
+        print(traceback_print_exc)
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
