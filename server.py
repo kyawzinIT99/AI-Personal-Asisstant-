@@ -24,7 +24,7 @@ import faceless_video_agent
 import google_contacts
 import verify_google_creds
 import clickup_agent
-from telegram_agent import handle_command, ALLOWED_CHAT_ID
+from telegram_agent import handle_command, ALLOWED_CHAT_ID, download_telegram_file, transcribe_voice, send_message
 
 app = Flask(__name__)
 
@@ -414,13 +414,32 @@ def telegram_webhook():
 
         chat_id = str(message.get('chat', {}).get('id'))
         text = message.get('text')
+        voice = message.get('voice')
 
         # Security check: only respond to the configured chat ID
         if ALLOWED_CHAT_ID and chat_id != str(ALLOWED_CHAT_ID):
             print(f"Unauthorized access attempt from Chat ID: {chat_id}")
             return jsonify({"status": "forbidden"}), 403
 
-        if text:
+        if voice:
+            print(f"Webhook received voice message from {chat_id}")
+            send_message(chat_id, "🎙️ _Transcribing your voice message..._")
+            
+            file_id = voice["file_id"]
+            voice_content = download_telegram_file(file_id)
+            
+            if voice_content:
+                transcribed_text = transcribe_voice(voice_content)
+                if transcribed_text:
+                    print(f"Transcribed: {transcribed_text}")
+                    send_message(chat_id, f"📝 _Transcribed_: \"{transcribed_text}\"")
+                    handle_command(transcribed_text, chat_id)
+                else:
+                    send_message(chat_id, "❌ Sorry, I couldn't transcribe your voice message.")
+            else:
+                send_message(chat_id, "❌ Sorry, I couldn't download your voice message.")
+        
+        elif text:
             print(f"Webhook received message: {text}")
             handle_command(text, chat_id)
 

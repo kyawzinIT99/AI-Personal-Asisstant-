@@ -11,6 +11,7 @@ load_dotenv()
 
 # Add implementation folder to path
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+import io
 import google_calendar
 import google_mail
 import google_contacts
@@ -46,6 +47,48 @@ def send_message(chat_id, text):
         requests.post(url, json=payload)
     except Exception as e:
         print(f"Error sending message: {e}")
+
+def download_telegram_file(file_id):
+    """Get file path and download the file from Telegram."""
+    try:
+        # Get file path
+        url = f"{API_URL}/getFile"
+        response = requests.get(url, params={"file_id": file_id})
+        file_info = response.json()
+        
+        if not file_info.get("ok"):
+            print(f"Error getting file info: {file_info}")
+            return None
+            
+        file_path = file_info["result"]["file_path"]
+        download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+        
+        # Download file
+        response = requests.get(download_url)
+        return response.content
+    except Exception as e:
+        print(f"Error downloading file: {e}")
+        return None
+
+def transcribe_voice(voice_data):
+    """Transcribe voice message using OpenAI Whisper."""
+    client = chat_agent.get_openai_client()
+    if not client:
+        return None
+        
+    try:
+        # Create a file-like object for the binary data
+        buffer = io.BytesIO(voice_data)
+        buffer.name = "voice.ogg" # Telegram voice messages are usually OGG
+        
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1", 
+            file=buffer
+        )
+        return transcript.text
+    except Exception as e:
+        print(f"Error transcribing voice: {e}")
+        return None
 
 def parse_intent(text):
     """
@@ -776,13 +819,32 @@ def main():
                     if message:
                         chat_id = str(message["chat"]["id"])
                         text = message.get("text")
+                        voice = message.get("voice")
                         
                         # Security check: only respond to the configured chat ID
                         if ALLOWED_CHAT_ID and chat_id != str(ALLOWED_CHAT_ID):
                             print(f"Unauthorized access attempt from Chat ID: {chat_id}")
                             continue
 
-                        if text:
+                        if voice:
+                            print(f"Received voice message from {chat_id}")
+                            send_message(chat_id, "🎙️ _Transcribing your voice message..._")
+                            
+                            file_id = voice["file_id"]
+                            voice_content = download_telegram_file(file_id)
+                            
+                            if voice_content:
+                                transcribed_text = transcribe_voice(voice_content)
+                                if transcribed_text:
+                                    print(f"Transcribed: {transcribed_text}")
+                                    send_message(chat_id, f"📝 _Transcribed_: \"{transcribed_text}\"")
+                                    handle_command(transcribed_text, chat_id)
+                                else:
+                                    send_message(chat_id, "❌ Sorry, I couldn't transcribe your voice message.")
+                            else:
+                                send_message(chat_id, "❌ Sorry, I couldn't download your voice message.")
+                        
+                        elif text:
                             print(f"Received message: {text}")
                             handle_command(text, chat_id)
                             

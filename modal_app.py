@@ -22,6 +22,8 @@ image = (
     )
     .apt_install("ffmpeg")
     .add_local_dir(".", remote_path="/root/app")
+    .add_local_file("credentials.json", remote_path="/root/app/credentials.json")
+    .add_local_file("token.json", remote_path="/root/app/token.json")
 )
 
 # App definition
