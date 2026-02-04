@@ -1,23 +1,22 @@
-import os
 import requests
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-WEBHOOK_URL = "https://kyawzin-ccna--personal-ai-assistant-web-app.modal.run/api/telegram/webhook"
+MODAL_URL = "https://kyawzin-ccna--personal-ai-assistant-web-app.modal.run"
+WEBHOOK_URL = f"{MODAL_URL}/api/telegram/webhook"
+
+if not BOT_TOKEN:
+    print("Error: TELEGRAM_BOT_TOKEN not found in .env")
+    exit(1)
 
 def set_webhook():
-    if not BOT_TOKEN:
-        print("Error: TELEGRAM_BOT_TOKEN not found.")
-        return
-
+    print(f"Setting webhook to: {WEBHOOK_URL}")
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook"
-    payload = {"url": WEBHOOK_URL}
-    
-    print(f"Setting webhook to: {WEBHOOK_URL}...")
-    response = requests.post(url, json=payload)
-    print(response.json())
+    response = requests.post(url, json={"url": WEBHOOK_URL})
+    print(f"Result: {response.json()}")
 
 if __name__ == "__main__":
     set_webhook()

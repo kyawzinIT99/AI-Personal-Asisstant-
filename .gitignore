@@ -33,7 +33,10 @@ service_account.json
 # Logs
 *.log
 
-# Distribution / packaging
+# Memory and Local State
+memory/
+automation_state.json
+
 build/
 dist/
 *.egg-info/

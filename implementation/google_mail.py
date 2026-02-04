@@ -125,7 +125,7 @@ def read_email(service, message_id):
     except HttpError as error:
         return {"status": "error", "message": str(error)}
 
-def create_draft(service, to, subject, body):
+def create_draft(service, to, subject, body, thread_id=None, in_reply_to=None):
     # Validate recipient email
     if not to or str(to).strip() == "":
         return {"status": "error", "message": "Recipient email address is required. Please provide a valid 'to' email address."}
@@ -145,11 +145,87 @@ def create_draft(service, to, subject, body):
         message = MIMEText(body)
         message['to'] = to
         message['subject'] = subject
+        
+        if in_reply_to:
+            message['In-Reply-To'] = in_reply_to
+            message['References'] = in_reply_to
+
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
         draft_body = {'message': {'raw': raw}}
         
+        if thread_id:
+            draft_body['message']['threadId'] = thread_id
+        
         draft = service.users().drafts().create(userId='me', body=draft_body).execute()
         return {"status": "success", "draft_id": draft['id'], "message": "Draft created successfully"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+def send_draft(service, draft_id):
+    if not draft_id:
+         return {"status": "error", "message": "Missing draft_id"}
+    try:
+        sent = service.users().drafts().send(userId='me', body={'id': draft_id}).execute()
+        return {"status": "success", "message_id": sent['id'], "thread_id": sent['threadId']}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+def list_drafts(service, max_results=5):
+    try:
+        results = service.users().drafts().list(userId='me', maxResults=max_results).execute()
+        drafts = results.get('drafts', [])
+        
+        output_drafts = []
+        if drafts:
+            for d in drafts:
+                try:
+                    # Fetch details
+                    draft_detail = service.users().drafts().get(userId='me', id=d['id'], format='metadata').execute()
+                    msg = draft_detail.get('message', {})
+                    headers = msg.get('payload', {}).get('headers', [])
+                    subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), '(no subject)')
+                    to_addr = next((h['value'] for h in headers if h['name'].lower() == 'to'), '(no recipient)')
+                    
+                    output_drafts.append({
+                        "id": d['id'],
+                        "subject": subject,
+                        "to": to_addr
+                    })
+                except:
+                    continue
+        return {"status": "success", "drafts": output_drafts}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+def get_draft(service, draft_id):
+    try:
+        draft = service.users().drafts().get(userId='me', id=draft_id, format='full').execute()
+        msg = draft.get('message', {})
+        headers = msg.get('payload', {}).get('headers', [])
+        subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), '(no subject)')
+        to_addr = next((h['value'] for h in headers if h['name'].lower() == 'to'), '(no recipient)')
+        
+        body = ""
+        payload = msg.get('payload', {})
+        if 'parts' in payload:
+             for part in payload['parts']:
+                 if part['mimeType'] == 'text/plain':
+                     data = part['body'].get('data')
+                     if data:
+                         body = base64.urlsafe_b64decode(data).decode()
+                         break
+        else:
+             data = payload['body'].get('data')
+             if data:
+                 body = base64.urlsafe_b64decode(data).decode()
+                 
+        return {
+            "status": "success", 
+            "id": draft['id'],
+            "subject": subject,
+            "to": to_addr,
+            "body": body
+        }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -186,6 +262,30 @@ def reply_email(service, message_id, body):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+def create_reply_draft(service, message_id, body):
+    if not message_id or not body:
+        return {"status": "error", "message": "Missing required fields: message_id or body"}
+    try:
+        # Get original message to find threadId and subject
+        original_msg = service.users().messages().get(userId='me', id=message_id, format='metadata').execute()
+        thread_id = original_msg.get('threadId')
+        headers = original_msg.get('payload', {}).get('headers', [])
+        subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), '')
+        
+        # Determine headers for reply
+        if not subject.lower().startswith('re:'):
+            subject = 'Re: ' + subject
+            
+        # We need to find the 'To' address (which is the 'From' of the original email, or Reply-To)
+        recipient = next((h['value'] for h in headers if h['name'].lower() == 'from'), '')
+        
+        # Message-ID for threading references
+        msg_id_header = next((h['value'] for h in headers if h['name'].lower() == 'message-id'), None)
+
+        return create_draft(service, recipient, subject, body, thread_id=thread_id, in_reply_to=msg_id_header)
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 def delete_email(service, message_id):
     if not message_id:
         return {"status": "error", "message": "Missing message_id"}
@@ -193,6 +293,15 @@ def delete_email(service, message_id):
         # We use trash instead of delete for safety
         service.users().messages().trash(userId='me', id=message_id).execute()
         return {"status": "success", "message": "Message moved to trash"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+def delete_draft(service, draft_id):
+    if not draft_id:
+        return {"status": "error", "message": "Missing draft_id"}
+    try:
+        service.users().drafts().delete(userId='me', id=draft_id).execute()
+        return {"status": "success", "message": "Draft deleted"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

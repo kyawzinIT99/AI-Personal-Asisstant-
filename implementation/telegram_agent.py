@@ -29,6 +29,56 @@ import clickup_agent
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ALLOWED_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
+MEM_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../memory")
+if not os.path.exists(MEM_DIR):
+    os.makedirs(MEM_DIR)
+
+# Load Configuration
+def load_config_file(filename):
+    # Root is one level up from implementation/
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), filename)
+    if os.path.exists(path):
+        with open(path, 'r', encoding='utf-8') as f:
+            return f.read()
+    return ""
+
+SOUL_CONTENT = load_config_file("SOUL.md")
+USER_CONTENT = load_config_file("USER.md")
+RULES_CONTENT = load_config_file("PERSONAL_EMAIL_RULES.md")
+
+# Ensure commands are strictly followed
+COMMAND_RESTRICTIONS = """
+STRICT COMMAND RULES:
+- Only use these commands for mail/daily ops:
+  * /digest -> digest
+  * /urgent -> urgent
+  * /draft -> draft_list or mail_draft
+  * /approve -> draft_approve
+  * /followup -> followup_list or followup_add
+"""
+
+def log_interaction(chat_id, user_text, bot_response):
+    """Log interaction to a daily file."""
+    try:
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        filename = os.path.join(MEM_DIR, f"{today}.md")
+
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        entry = f"\n## [{timestamp}] User: {chat_id}\n**Input:** {user_text}\n**Response:** {bot_response}\n"
+        
+        with open(filename, "a", encoding="utf-8") as f:
+            f.write(entry)
+            
+        # Also append to global MEMORY.md (truncated)
+        # Also append to global MEMORY.md (truncated)
+        global_mem = os.path.join(MEM_DIR, "MEMORY.md")
+        with open(global_mem, "a", encoding="utf-8") as f:
+            f.write(f"- [{today} {timestamp}] {user_text} -> {bot_response[:100]}...\n")
+            
+    except Exception as e:
+        print(f"Error logging interaction: {e}")
 
 def get_updates(offset=None):
     url = f"{API_URL}/getUpdates"
@@ -105,6 +155,17 @@ def parse_intent(text):
     You are an intent classifier for a personal assistant. 
     Current Time: {now_str}
     
+    SYSTEM CONTEXT:
+    {SOUL_CONTENT}
+    
+    USER PROFILE:
+    {USER_CONTENT}
+    
+    EMAIL RULES:
+    {RULES_CONTENT}
+
+    {COMMAND_RESTRICTIONS}
+
     Categorize the user request into one of these intents and extract parameters in JSON format.
     
     Intents:
@@ -113,6 +174,15 @@ def parse_intent(text):
     - calendar_update: {{"target_event": "name of event to move", "new_start_time": "ISO format", "date": "today"|"tomorrow"}}
     - calendar_delete: {{"target_event": "name of event to delete", "date": "today"|"tomorrow"}}
     - mail_list: {{"query": "string"|null, "max_results": 5}}
+
+    Rules for mail_list:
+    - Recognize "list emails", "check mail", "show inbox", "check invoices"
+    - If user asks for specific type (e.g. "check invoices"), set query="invoice"
+    - Examples:
+      * "check my emails" -> {{"intent": "mail_list", "params": {{"query": null}}}}
+      * "check invoices" -> {{"intent": "mail_list", "params": {{"query": "invoice"}}}}
+      * "show recent emails from John" -> {{"intent": "mail_list", "params": {{"query": "from:John"}}}}
+
     - mail_send: {{"to": "email@example.com", "subject": "string", "body": "string"}}
     - mail_reply: {{"message_id": "string"|null, "body": "reply text"}}
     - mail_draft: {{"to": "email@example.com", "subject": "string", "body": "string"}}
@@ -129,6 +199,15 @@ def parse_intent(text):
     - clickup_task: {{"task_id": "id derived from text"}}
     - clickup_create: {{"name": "task name", "list_id": "optional list id", "description": "optional"}}
     - clickup_list: {{"list_id": "optional list id"}}
+    - digest: {{"limit": 10}}
+    - urgent: {{"limit": 5}}
+    - draft_list: {{}}
+    - draft_approve: {{"draft_id": "id"}}
+    - draft_edit: {{"draft_id": "id", "instructions": "what to change"}}
+    - draft_delete: {{"draft_id": "id"}}
+    - followup_add: {{"note": "what to track"}}
+    - followup_list: {{}}
+    - daily_log: {{}} (summarize actions, written in evening)
     - chat: {{"query": "original text"}} (fallback for general questions)
 
     Rules for calendar_list:
@@ -235,6 +314,21 @@ def parse_intent(text):
     - Recognize "list clickup", "show my clickup tasks"
     - Examples:
       * "list my clickup tasks" → {{"intent": "clickup_list", "params": {{"list_id": null}}}}
+
+    Rules for digest/urgent:
+    - "/digest", "digest", "summary", "what did I miss" -> digest
+    - "/urgent", "urgent emails", "high priority" -> urgent
+
+    Rules for drafts:
+    - "/drafts", "list drafts", "show drafts" -> draft_list
+    - "approve draft X", "send draft X" -> draft_approve (extract ID)
+    - "change draft X", "edit draft X" -> draft_edit
+    - "delete draft X" -> draft_delete
+
+    Rules for followups:
+    - "track this", "remind me to follow up on X" -> followup_add
+    - "show followups", "tracking list" -> followup_list
+
     Other rules:
     - Return ONLY valid JSON
     - If the user asks for "tomorrow's schedule", intent is calendar_list with date="tomorrow"
@@ -272,6 +366,79 @@ def parse_intent(text):
         print(f"Error parsing intent: {e}")
         return {"intent": "chat", "params": {"query": text}}
 
+FOLLOWUP_FILE = os.path.join(MEM_DIR, "followups.json")
+
+def load_followups():
+    if os.path.exists(FOLLOWUP_FILE):
+        with open(FOLLOWUP_FILE, 'r') as f:
+            return json.load(f)
+    return []
+
+def save_followups(items):
+    with open(FOLLOWUP_FILE, 'w') as f:
+        json.dump(items, f, indent=2)
+
+STATE_FILE = os.path.join(MEM_DIR, "automation_state.json")
+
+def load_state():
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_state(state):
+    with open(STATE_FILE, 'w') as f:
+        json.dump(state, f, indent=2)
+
+def check_automations(chat_id):
+    """Run scheduled jobs and monitor for urgent alerts."""
+    state = load_state()
+    today = datetime.now().strftime("%Y-%m-%d")
+    hour = datetime.now().hour
+    
+    # Initialize today's state
+    if state.get("last_date") != today:
+        state = {"last_date": today, "morning_done": False, "evening_done": False, "last_alert_check": 0}
+        save_state(state)
+
+    # 1. Morning Digest (Automatic at 8-9 AM)
+    if not state.get("morning_done") and 8 <= hour < 10:
+        print("Triggering automatic morning digest...")
+        handle_command("/digest", chat_id)
+        state["morning_done"] = True
+        save_state(state)
+
+    # 2. Evening Log (Automatic at 8-9 PM)
+    if not state.get("evening_done") and 20 <= hour < 22:
+        print("Triggering automatic evening log...")
+        handle_command("daily_log", chat_id)
+        state["evening_done"] = True
+        save_state(state)
+
+    # 3. Security/Finance Alerts Monitor (Every 15 mins)
+    now_ts = time.time()
+    if now_ts - state.get("last_alert_check", 0) > 900: # 15 mins
+        print("Checking for security/finance alerts...")
+        try:
+            service = google_mail.get_service()
+            # Search for security or finance alerts unread using keywords
+            query = "is:unread (security OR alert OR bank OR verify OR unauthorized OR login OR finance)"
+            res = google_mail.list_emails(service, max_results=5, query=query)
+            if res['status'] == 'success' and res['messages']:
+                for m in res['messages']:
+                    alert_msg = f"🔔 *URGENT ALERT*\nFrom: {m['from']}\nSub: {m['subject']}\n\nCheck /urgent for details."
+                    send_message(chat_id, alert_msg)
+            state["last_alert_check"] = now_ts
+            save_state(state)
+        except Exception as e:
+            print(f"Alert monitor error: {e}")
+
+
+def reply_and_log(chat_id, text, user_input=None):
+    send_message(chat_id, text)
+    if user_input:
+        log_interaction(chat_id, user_input, text)
+
 def handle_command(text, chat_id):
     print(f"Routing intent for: {text}")
     parsed = parse_intent(text)
@@ -281,34 +448,22 @@ def handle_command(text, chat_id):
     # Helper function to show available tools
     def send_help_message():
         help_text = """
-🤖 *Available Commands:*
+🤖 *Antigravity Controls*
 
-📧 *Communication*
-• "Send email to [email]..."
-• "Reply to latest email..."
-• "Find contact [name]"
+🔹 *Daily Operations*
+• `/digest` - Morning briefing (Inbox + Calendar)
+• `/urgent` - Check high-priority items
+• `/draft` - List pending drafts
+• `/approve [id]` - Approve & send a draft
+• `/followup` - Track/list follow-ups
 
-📅 *Productivity*
-• "Show my calendar"
-• "Book meeting tomorrow..."
-
-🎨 *Creation*
-• "Write a blog about..."
-• "Generate image of..."
-• "Make a video about..."
-• "Check video status..."
-
-🧠 *Utilities*
+🔹 *Other Actions*
+• "Draft email to..."
+• "Check calendar..."
 • "Search web for..."
-• "Weather in [city]"
-• "Am I subscribed?"
-• "Find image of [query]"
-• "Check ClickUp invoice [id]"
-• "List ClickUp tasks"
-
-Example: _"Write a blog about AI and send it to me"_
 """
         send_message(chat_id, help_text)
+
 
     try:
         if text.strip() == "/help" or text.strip().lower() == "help":
@@ -460,12 +615,13 @@ Example: _"Write a blog about AI and send it to me"_
                 send_message(chat_id, "❌ Cannot send email: No recipient email address found. Please specify who to send the email to (e.g., 'send email to john@example.com')")
             else:
                 service = google_mail.get_service()
-                result = google_mail.send_email(service, to=to_addr, subject=subject, body=body)
-                print(f"DEBUG: mail_send result: {result}")
+                # Enforce Draft Policy: Create draft instead of sending
+                result = google_mail.create_draft(service, to=to_addr, subject=subject, body=body)
+                print(f"DEBUG: mail_send (as draft) result: {result}")
                 if result['status'] == 'success':
-                    send_message(chat_id, f"✅ Email sent to *{to_addr}*")
+                    send_message(chat_id, f"📝 Draft created for *{to_addr}*.\nID: `{result.get('draft_id')}`\nTo send, reply: 'approve {result.get('draft_id')}'")
                 else:
-                    send_message(chat_id, f"❌ Mail error: {result['message']}")
+                    send_message(chat_id, f"❌ Draft error: {result['message']}")
 
         elif intent == "mail_reply":
             body = params.get("body")
@@ -486,12 +642,12 @@ Example: _"Write a blog about AI and send it to me"_
                         send_message(chat_id, "❌ No emails found to reply to")
                         return
                 
-                result = google_mail.reply_email(service, message_id=message_id, body=body)
-                print(f"DEBUG: mail_reply result: {result}")
+                result = google_mail.create_reply_draft(service, message_id=message_id, body=body)
+                print(f"DEBUG: mail_reply (as draft) result: {result}")
                 if result['status'] == 'success':
-                    send_message(chat_id, f"✅ Reply sent to email thread")
+                    send_message(chat_id, f"📝 Reply Draft created.\nID: `{result.get('draft_id')}`\nTo send, reply: 'approve {result.get('draft_id')}'")
                 else:
-                    send_message(chat_id, f"❌ Reply error: {result['message']}")
+                    send_message(chat_id, f"❌ Reply Draft error: {result['message']}")
 
         elif intent == "mail_draft":
             to_addr = params.get("to")
@@ -727,6 +883,120 @@ Example: _"Write a blog about AI and send it to me"_
                 else:
                     send_message(chat_id, f"❌ ClickUp error: {result['message']}")
 
+
+        elif intent == "digest":
+            limit = params.get("limit", 10)
+            send_message(chat_id, "☕ Preparing your daily digest...")
+            
+            # 1. Get Calendar for today
+            cal_service = google_calendar.get_service()
+            cal_res = google_calendar.list_events(cal_service, max_results=5, date_filter="today")
+            cal_text = ""
+            if cal_res['status'] == 'success':
+                for e in cal_res['events']:
+                     t = e['start'].split('T')[1][:5] if 'T' in e['start'] else "All Day"
+                     cal_text += f"• {t} - {e['summary']}\n"
+            
+            # 2. Get Recent unread emails and summarize
+            mail_service = google_mail.get_service()
+            mail_res = google_mail.list_emails(mail_service, max_results=limit, query="is:unread")
+            summary = "No unread emails found."
+            if mail_res['status'] == 'success' and mail_res['messages']:
+                email_list = mail_res['messages']
+                email_context = "\n".join([f"- From {e['from']}: {e['subject']} ({e.get('snippet','')})" for e in email_list])
+                
+                system_prompt = f"You are an executive assistant for Kyaw Zin Tun. Summarize these emails into a concise bulleted digest. Highlight action items. Context: {USER_CONTENT}"
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": email_context}
+                ]
+                response = chat_agent.chat_openai(messages)
+                summary = response.get('choices', [{}])[0].get('message', {}).get('content', "Could not generate summary.")
+
+            # 3. Format output
+            msg = f"🌅 *Daily Digest*\n\n"
+            msg += f"📅 *Today's Schedule*:\n{cal_text if cal_text else 'No events found.'}\n\n"
+            msg += f"📧 *Email Summary*:\n{summary}\n"
+            
+            send_message(chat_id, msg)
+
+        elif intent == "urgent":
+            limit = params.get("limit", 5)
+            send_message(chat_id, "🚨 Checking for urgent items...")
+            
+            mail_service = google_mail.get_service()
+            # Search for 'urgent' or 'important' or specific rules (Finance, Security, Subscriptions)
+            query = "is:unread (label:important OR subject:urgent OR subject:asap OR invoice OR bill OR subscription OR alert OR security)"
+            mail_res = google_mail.list_emails(mail_service, max_results=limit, query=query)
+            
+            if mail_res['status'] == 'success' and mail_res['messages']:
+                msg = f"🚨 *Urgent Items*:\n\n"
+                for m in mail_res['messages']:
+                    msg += f"• *{m['subject']}*\n  From: {m['from']}\n  `ID: {m['id']}`\n\n"
+                send_message(chat_id, msg)
+            else:
+                send_message(chat_id, "✅ No urgent items found.")
+
+        elif intent == "draft_list":
+            service = google_mail.get_service()
+            res = google_mail.list_drafts(service)
+            if res['status'] == 'success':
+                drafts = res['drafts']
+                if not drafts:
+                    send_message(chat_id, "📝 No active drafts.")
+                else:
+                    msg = "📝 *Current Drafts*:\n\n"
+                    for d in drafts:
+                        msg += f"• PW: *{d['to']}*\n  Sub: {d['subject']}\n  `ID: {d['id']}`\n\n"
+                    msg += "To approve, reply: 'approve draft [ID]'"
+                    send_message(chat_id, msg)
+            else:
+                send_message(chat_id, f"❌ Error listing drafts: {res['message']}")
+
+        elif intent == "draft_approve":
+            draft_id = params.get("draft_id")
+            if not draft_id:
+                send_message(chat_id, "❌ Please specify a draft ID to approve.")
+            else:
+                service = google_mail.get_service()
+                res = google_mail.send_draft(service, draft_id)
+                if res['status'] == 'success':
+                    send_message(chat_id, f"✅ Draft {draft_id} sent successfully!")
+                else:
+                    send_message(chat_id, f"❌ Error sending draft: {res['message']}")
+
+        elif intent == "draft_delete":
+            draft_id = params.get("draft_id")
+            if not draft_id:
+                send_message(chat_id, "❌ Please specify a draft ID to delete.")
+            else:
+                service = google_mail.get_service()
+                res = google_mail.delete_draft(service, draft_id)
+                if res['status'] == 'success':
+                    send_message(chat_id, f"🗑️ Draft {draft_id} deleted.")
+                else:
+                    send_message(chat_id, f"❌ Error deleting draft: {res['message']}")
+
+        elif intent == "followup_list":
+            items = load_followups()
+            if not items:
+                send_message(chat_id, "👀 No follow-ups tracked.")
+            else:
+                msg = "👀 *Follow-up List*:\n\n"
+                for i, item in enumerate(items):
+                    msg += f"{i+1}. {item.get('note', item)} ({item.get('date', '')})\n"
+                send_message(chat_id, msg)
+
+        elif intent == "followup_add":
+            note = params.get("note")
+            if not note:
+                send_message(chat_id, "❌ Please specify what to follow up on.")
+            else:
+                items = load_followups()
+                items.append({"note": note, "date": datetime.now().strftime("%Y-%m-%d %H:%M")})
+                save_followups(items)
+                send_message(chat_id, f"✅ Added to follow-ups: '{note}'")
+
         elif intent == "clickup_list":
             list_id = params.get("list_id") or os.getenv("CLICKUP_LIST_ID")
             if not list_id:
@@ -746,27 +1016,61 @@ Example: _"Write a blog about AI and send it to me"_
                 else:
                     send_message(chat_id, f"❌ ClickUp error: {result['message']}")
 
-        elif intent == "clickup_search":
-            query = params.get("query")
-            list_id = params.get("list_id") or os.getenv("CLICKUP_LIST_ID")
-            if not query:
-                send_message(chat_id, "❌ Please specify a search term. Example: 'Search ClickUp for John'")
-            elif not list_id:
-                send_message(chat_id, "❌ ClickUp List ID is not configured.")
+        elif intent == "clickup_task":
+            task_id = params.get("task_id")
+            if not task_id:
+                send_message(chat_id, "❌ Please provide a Task ID.")
             else:
-                send_message(chat_id, f"🔍 Searching ClickUp for '{query}'...")
-                result = clickup_agent.search_tasks(list_id, query)
-                if result['status'] == 'success':
-                    tasks = result['tasks']
-                    if not tasks:
-                        send_message(chat_id, f"ℹ️ No tasks found matching '{query}'.")
-                    else:
-                        msg = f"🔍 *Search Results for '{query}' ({len(tasks)})*:\n\n"
-                        for t in tasks[:10]:
-                            msg += f"• *{t['name']}* (`{t['id']}`)\n"
-                        send_message(chat_id, msg)
+                res = clickup_agent.get_task(task_id)
+                if res['status'] == 'success':
+                    t = res['task']
+                    msg = f"📌 *Task: {t['name']}*\nStatus: {t['status']['status']}\nURL: {t['url']}"
+                    send_message(chat_id, msg)
                 else:
-                    send_message(chat_id, f"❌ ClickUp error: {result['message']}")
+                    send_message(chat_id, f"❌ Error: {res['message']}")
+
+        elif intent == "daily_log": # Evening Session
+            send_message(chat_id, "🌙 Generating your evening summary...")
+            
+            # 1. Gather actions taken from memory
+            today = datetime.now().strftime("%Y-%m-%d")
+            mem_file = os.path.join(MEM_DIR, f"{today}.md")
+            actions = "No actions logged today."
+            if os.path.exists(mem_file):
+                with open(mem_file, 'r') as f:
+                    actions = f.read()
+            
+            # 2. Gather pending followups
+            followups = load_followups()
+            pending = [f['note'] for f in followups if f.get('status') == 'pending']
+            
+            # 3. Summarize with LLM
+            prompt = f"""
+            Summarize the actions taken today and list pending items for tomorrow.
+            Context: {USER_CONTENT}
+            
+            Actions Log:
+            {actions}
+            
+            Pending Followups:
+            {pending}
+            """
+            messages = [
+                {"role": "system", "content": "You are an executive assistant. Write a professional daily log summary."},
+                {"role": "user", "content": prompt}
+            ]
+            response = chat_agent.chat_openai(messages)
+            summary = response.get('choices', [{}])[0].get('message', {}).get('content', "Could not generate log.")
+            
+            # 4. Save to daily log file
+            log_dir = os.path.join(MEM_DIR, "daily_logs")
+            if not os.path.exists(log_dir): os.makedirs(log_dir)
+            with open(os.path.join(log_dir, f"{today}.md"), 'w') as f:
+                f.write(summary)
+            
+            send_message(chat_id, f"🌙 *Evening Summary & Daily Log*:\n\n{summary}")
+
+
         else: # Default Chat
             # Inject system prompt so the specialized agent knows its own capabilities
             system_prompt = """
@@ -811,6 +1115,10 @@ def main():
     
     while True:
         try:
+            # Run periodic automations
+            if ALLOWED_CHAT_ID:
+                check_automations(str(ALLOWED_CHAT_ID))
+
             updates = get_updates(last_update_id)
             if updates and updates.get("ok"):
                 for update in updates.get("result", []):
@@ -857,4 +1165,11 @@ def main():
             time.sleep(5)
 
 if __name__ == "__main__":
+    # Ensure webhook is deleted so polling works
+    try:
+        print("Deleting webhook to enable polling...")
+        requests.get(f"{API_URL}/deleteWebhook")
+    except Exception as e:
+        print(f"Warning: Could not delete webhook: {e}")
+        
     main()
